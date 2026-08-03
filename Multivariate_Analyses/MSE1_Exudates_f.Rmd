@@ -1,0 +1,1039 @@
+---
+title: "MSE1_Exudates_v3"
+output: html_document
+date: "2026-05-15"
+---
+---
+title: "MSE1_Exudates_v2"
+author: "Natalie Ford"
+date: "`r Sys.Date()`"
+output: html_document
+---
+Final R Markdown file for exudate analysis for MSE1 publication
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE, 
+  warning = FALSE, 
+  message = FALSE)
+```
+
+```{r}
+# load packages and set theme 
+library(ggplot2)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(readxl)
+library(vegan)
+library(tibble)
+library(phyloseq)
+library(stringr)
+library(ggrepel)
+library(ComplexHeatmap)
+library(ggpubr)
+
+theme_set(theme_bw())
+```
+
+```{r}
+# import data (positive and negative mode data from GNPS2 export)
+# this is only annotated dataset 
+gnps2_neg_annotated <- read_tsv("~/Desktop/FDA_Lab/Experiment1/manuscript/data/MSE1_Full_Neg_results.tsv")
+gnps2_pos_annotated <- read_tsv("~/Desktop/FDA_Lab/Experiment1/manuscript/data/MSE1_Full_Pos_results.tsv")
+
+# import full quantification table from MZmine (both modes)
+# this is full dataset 
+mzmine_neg_full <- read_csv("~/Desktop/FDA_Lab/Experiment1/manuscript/data/MSE1_Negative_spectra_quant.csv")
+mzmine_pos_full <- read_csv("~/Desktop/FDA_Lab/Experiment1/manuscript/data/MSE1_Positive_spectra_quant.csv")
+
+# need to rename some columns from the mzmine files
+# they are currently named after the original raw files, followed by Peak area 
+# (example: 20260217-Ford-HILIC-XBridge-Amide-2_1x150mm-Negative-96.raw Peak area")
+# I want to only keep the last term before the .raw (this is the sample ID)
+mzmine_neg_full <- mzmine_neg_full %>%
+  rename_with(
+    ~ str_extract(.x, "(?<=_)[^_]+(?=\\.raw)"),
+    .cols = contains(".raw")
+  ) # this works for the pattern "20260403_Ford_HILIC_Negative_QC02.raw Peak area"
+
+mzmine_neg_renamed <- mzmine_neg_full %>%
+  rename_with(
+    ~ str_extract(.x, "[^-]+$"),
+    .cols = contains("1x150mm")
+  ) # this is to deal with the other pattern 
+
+# verify this worked :)
+names(mzmine_neg_renamed) 
+
+
+# repeat with pos mode
+mzmine_pos_full <- mzmine_pos_full %>%
+  rename_with(
+    ~ str_extract(.x, "(?<=_)[^_]+(?=\\.raw)"),
+    .cols = contains(".raw")
+  ) 
+
+mzmine_pos_renamed <- mzmine_pos_full %>%
+  rename_with(
+    ~ str_extract(.x, "[^-]+$"),
+    .cols = contains("1x150mm")
+  ) 
+
+# verify this worked :)
+names(mzmine_pos_renamed) 
+
+
+# need to remove the standards (not the same as QC)
+mzmine_neg_renamed_nostandards <- mzmine_neg_renamed %>% dplyr::select(-Standard1, -Standard2, -Standard3, -Standard4)
+mzmine_pos_renamed_nostandards <- mzmine_pos_renamed %>% dplyr::select(-Standard1, -Standard2, -Standard3, -ProcessBlank10, -`4`)
+
+mzmine_neg_renamed_nostandards <- subset(mzmine_neg_renamed_nostandards, select = -`...200`) # ...200 is an empty column
+mzmine_pos_renamed_nostandards <- subset(mzmine_pos_renamed_nostandards, select = -`...201`) # ...201 is an empty column
+
+dim(mzmine_neg_renamed_nostandards) #14459 rows x 195 columns 
+dim(mzmine_pos_renamed_nostandards) #10073 rows x 195 columns
+
+
+# merge full neg with annotated neg
+neg_with_annotations <- mzmine_neg_renamed_nostandards %>% 
+  left_join(gnps2_neg_annotated %>% 
+              dplyr::select(UniqueID, Compound_Name, superclass, class, subclass),
+    by = c("row ID" = "UniqueID")
+  ) %>%
+  mutate(
+    Annotation = ifelse(is.na(Compound_Name), "Unknown", Compound_Name),
+    Annotated = ifelse(is.na(Compound_Name), "No", "Yes")
+  )
+# summary 
+nrow(neg_with_annotations) # 14459 compounds 
+sum(neg_with_annotations$Annotated == "Yes", na.rm = TRUE) # 199 annotated compounds (1.3% annotated from neg mode)
+
+# merge full pos with annotated pos 
+pos_with_annotations <- mzmine_pos_renamed_nostandards %>% 
+  left_join(gnps2_pos_annotated %>% 
+              dplyr::select(UniqueID, Compound_Name, superclass, class, subclass),
+    by = c("row ID" = "UniqueID")
+  ) %>%
+  mutate(
+    Annotation = ifelse(is.na(Compound_Name), "Unknown", Compound_Name),
+    Annotated = ifelse(is.na(Compound_Name), "No", "Yes")
+  )
+# summary 
+nrow(pos_with_annotations) # 10073 compounds 
+sum(pos_with_annotations$Annotated == "Yes", na.rm = TRUE) # 174 annotated compounds (1.7% annotated from pos mode)
+
+# make sure pos and neg have same number of columns before merging
+ncol(pos_with_annotations) # 201
+ncol(neg_with_annotations) # 201
+
+## Merge pos and neg modes 
+# add mode identifier and combine 
+neg_with_annotations$Mode <- "negative"
+pos_with_annotations$Mode <- "positive"
+
+full_merged <- bind_rows(neg_with_annotations, pos_with_annotations)
+ncol(full_merged) # confirming that new columns aren't being added to the left, but that they are truly combining 
+nrow(full_merged) # 24532 total compounds 
+sum(full_merged$Annotated =="Yes", na.rm = TRUE) # 373 annotated compounds (1.5% of total compounds annotated)
+
+# need to change sample IDs so they don't have 0s in front of them 
+full_merged <- full_merged %>%
+  rename(
+    `1` = `01`,
+    `2` = `02`,
+    `3` = `03`, 
+    `4` = `04`,  
+    `5` = `05`, 
+    `6` = `06`, 
+    `8` = `08`
+  )
+
+write_tsv(full_merged, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/full_merged.tsv")
+```
+
+```{r}
+# import metadata 
+x <- read_xlsx("~/Desktop/FDA_Lab/Experiment1/manuscript/data/FINAL_METADATA_SHEET.xlsx")
+
+# remove sample IDs 59 and 114 because they did not survive the experiment and there is no data associated with them 
+x <- x %>% filter(ID !=59)
+x <- x %>% filter(ID !=114)
+# remove PCR and extraction neg controls (not relevant for this part of the data)
+x <- x %>% filter(ID !=177)
+x <- x %>% filter(ID !=178)
+x <- x %>% filter(ID !=179)
+x <- x %>% filter(ID !=180)
+x <- x %>% filter(ID !=181)
+x <- x %>% filter(ID !=182)
+x <- x %>% filter(ID !=183)
+x <- x %>% filter(ID !=184)
+x <- x %>% filter(ID !=185)
+x <- x %>% filter(ID !=186)
+# also need to remove sample IDs that did not have any metabolomics information (did not submit for HILIC): 
+x <- x %>% filter(ID !=67)
+x <- x %>% filter(ID !=71)
+x <- x %>% filter(ID !=80)
+x <- x %>% filter(ID !=125)
+mse1 <- x %>% filter(ID !=128)
+# remove the outliers from the microbiome data and plant physiology data 
+mse1 <- mse1 %>% filter(ID !=66)
+mse1 <- mse1 %>% filter(ID !=47)
+mse1 <- mse1 %>% filter(ID !=164)
+
+# make sample ID, number of stressors, and stress ID factors 
+mse1$ID <- as.factor(mse1$ID)
+mse1$Num_Stress <- as.factor(mse1$Num_Stress)
+```
+
+```{r}
+# filter with QC samples 
+qc_sample_ids <- c("QC1", "QC2", "QC3", "QC4", "QC05", "QC06", "QC07", "QC08", "QC09", "QC10", 
+             "QC11", "QC12", "QC13") 
+
+# Pivot to create a 'sample_id' column
+# Assuming your data has metadata columns and then sample columns
+long_data <- full_merged %>%
+  pivot_longer(
+    cols = matches("^[0-9]|QC"), # Adjust this regex to match ONLY your sample columns
+    names_to = "sample_id", 
+    values_to = "intensity"
+  )
+
+nrow(long_data) # 4464824 total compounds across all samples 
+# (note that this counts each appearance of every compound as a new row; so if compound A is in 3 samples, it counts as 3 rows)
+
+# Compounds in >60% of QC samples AND low CV (<30% variation across QC samples; ensures reproducibility)
+qc_filtered_data <- long_data %>%
+  filter(sample_id %in% qc_sample_ids) %>%
+  group_by(`row m/z`, `row retention time`, Annotation, superclass, class, subclass) %>%
+  summarise(
+    qc_prevalence = mean(!is.na(intensity)),
+    qc_cv = sd(intensity, na.rm = TRUE) / mean(intensity, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  filter(qc_prevalence > 0.6 & qc_cv < 0.3) %>% # 60% detection, <30% CV
+  # inner_join back to the long_data to filter your actual samples
+  inner_join(long_data, by = c("row m/z", "row retention time", "Annotation", "superclass", "class", "subclass")) %>%
+  filter(!is.na(intensity)) # might come back and play around with this (40$ CV?) 
+
+nrow(qc_filtered_data) # 51870 compounds (keeping only 1% of total compounds)
+
+# Annotated compounds only (no "Unknown")
+annotated_data <- qc_filtered_data %>%
+  filter(!grepl("Unknown", Annotation, ignore.case = TRUE))
+nrow(annotated_data) # 6370 annotated compounds 
+
+# need to remove QC after filtering to remove rows that have NAs 
+annotated_data_clean <- annotated_data %>% 
+  filter(!sample_id %in% qc_sample_ids)
+
+nrow(annotated_data_clean) # 5915 total compounds (again, this counts each appearance of a compound as a row)
+```
+
+```{r}
+# need to create a new column where I combine row m/z and row retention time for the "taxa" table I will eventually create
+mzRT_annotated_data_clean <- annotated_data_clean %>% 
+  dplyr::select(`row m/z`, `row retention time`, sample_id, intensity) %>% 
+  unite(
+    col = "mz_rt", # name of new column
+    `row m/z`, `row retention time`, # columns to merge
+    sep = "_", # separator
+    remove = TRUE # remove old columns
+  )
+
+# I need to un-pivot the data (move from the long to wide format so that each sample ID is a row and each mz_rt is a column)
+mzRT_annotated_data_clean <- mzRT_annotated_data_clean %>%
+  pivot_wider(
+    names_from = mz_rt,    # Values in this column become column headers
+    values_from = intensity # Values in this column fill the cells
+  )
+dim(mzRT_annotated_data_clean) # 169 x 36 (so 35 unique annotated compounds across 169 samples)
+
+# final data wrangling steps so phyloseq will accept this :) 
+
+# set sample IDs as row names and remove the sample_id column 
+otu_mat <- mzRT_annotated_data_clean %>%
+  column_to_rownames("sample_id")
+# convert to a numeric matrix 
+otu_mat <- as.matrix(otu_mat)
+# create the phyloseq OTU table object 
+OTU = otu_table(otu_mat, taxa_are_rows = FALSE)
+
+
+# now creating the "taxa" table for the phyloseq object, where the m/z_RT is matched to the annotation information 
+# first need to create tibble with mz_rt and annotations 
+mzRT_annotated_data_clean_2 <- annotated_data_clean %>% 
+  dplyr::select(`row m/z`, `row retention time`, Annotation, superclass, class, subclass) %>% 
+  unite(
+    col = "mz_rt", # name of new column
+    `row m/z`, `row retention time`, # columns to merge
+    sep = "_", # separator
+    remove = TRUE # remove old columns
+  )
+
+# un-pivot again so no duplicate mz_RT values 
+tax_wide <- mzRT_annotated_data_clean_2 %>%
+  dplyr::select(mz_rt, Annotation, superclass, class, subclass) %>%
+  distinct(mz_rt, .keep_all = TRUE) # Ensures one row per feature
+  
+dim(tax_wide) # 35 x 5 (so 35 unique annotated compounds across the 4 "taxonomic" levels)
+
+# convert mz_RT to rownames and make a matrix
+tax_mat <- tax_wide %>%
+  column_to_rownames("mz_rt") %>% 
+  as.matrix()
+
+TAX <- tax_table(tax_mat)
+
+# now I just need metadata
+# recall you already imported metadata:
+mse1
+
+# confirm that you have the same # of samples here as you do in the otu table 
+dim(mse1) # 169
+dim(OTU) # 169 
+
+# make sure rowname = sample ID (but keep sample ID in the metadata)
+metadata_ready <- mse1 %>%
+  mutate(sample_id_copy = ID) %>% # Make a copy
+  column_to_rownames("sample_id_copy")   # Use the copy as row names
+
+SAMPLES <- sample_data(metadata_ready)
+
+
+# merge everything for full phyloseq object 
+physeq_annotated <- phyloseq(OTU, TAX, SAMPLES)  
+
+# check 
+otu_df <- as.data.frame(otu_table(physeq_annotated))
+otu_df # looks good 
+
+tax_df <- as.data.frame(tax_table(physeq_annotated))
+tax_df # looks good 
+
+sample_df <- as.data.frame(sample_data(physeq_annotated))
+sample_df # looks good; sample IDs are in the order that the OTU table is in 
+
+# save 
+save(physeq_annotated, file="~/Desktop/FDA_Lab/Experiment1/manuscript/data/phyloseq_annotated.Rdata")
+```
+
+```{r}
+# now I need to do the same, but with the full dataset, not just the compounds that have been annotated 
+# go back to the qc_filtered_data object, this was the last thing I did before splitting the dataset by the compounds that are annotated
+qc_filtered_data
+dim(qc_filtered_data) # 51870 compounds (non-unique counts)
+
+# remove QC after filtering to remove rows that have NAs 
+full_data_clean <- qc_filtered_data %>% 
+  filter(!sample_id %in% qc_sample_ids)
+nrow(full_data_clean) # 48165 compounds (non-unique counts)
+
+# create the mz_RT column in the full data
+mzRT_full_data_clean <- full_data_clean %>% 
+  dplyr::select(`row m/z`, `row retention time`, sample_id, intensity) %>% 
+  unite(
+    col = "mz_rt", # name of new column
+    `row m/z`, `row retention time`, # columns to merge
+    sep = "_", # separator
+    remove = TRUE # remove old columns
+  )
+
+# un-pivot the data
+mzRT_full_data_clean <- mzRT_full_data_clean %>%
+  pivot_wider(
+    names_from = mz_rt,    # Values in this column become column headers
+    values_from = intensity # Values in this column fill the cells
+  )
+dim(mzRT_full_data_clean) # 169 x 286 (so 285 unique compounds across 169 samples)
+
+# set sample IDs as row names and remove the sample_id column 
+otu_mat_full <- mzRT_full_data_clean %>%
+  column_to_rownames("sample_id")
+# convert to a numeric matrix 
+otu_mat_full <- as.matrix(otu_mat_full)
+# create the phyloseq OTU table object 
+OTU_FULL = otu_table(otu_mat_full, taxa_are_rows = FALSE)
+
+
+# now creating the "taxa" table for the phyloseq object, where the m/z_RT is matched to the annotation information 
+# first need to create tibble with mz_rt and annotations 
+mzRT_full_data_clean_2 <- full_data_clean %>% 
+  dplyr::select(`row m/z`, `row retention time`, Annotation, superclass, class, subclass) %>% 
+  unite(
+    col = "mz_rt", # name of new column
+    `row m/z`, `row retention time`, # columns to merge
+    sep = "_", # separator
+    remove = TRUE # remove old columns
+  )
+
+# un-pivot again so no duplicate mz_RT values 
+tax_wide_full <- mzRT_full_data_clean_2 %>%
+  dplyr::select(mz_rt, Annotation, superclass, class, subclass) %>%
+  distinct(mz_rt, .keep_all = TRUE) # Ensures one row per feature
+
+# phyloseq works best if we replace any NAs with Unclassified
+tax_wide_full <- tax_wide_full %>%
+  mutate(across(everything(), ~replace_na(as.character(.), "Unclassified"))) 
+  
+dim(tax_wide_full) # 285 x 5 (so 285 unique compounds across the 4 "taxonomic" levels - yay that 285 mz_RT matches with the OTU!)
+
+# convert mz_RT to rownames and make a matrix
+tax_mat_full <- tax_wide_full %>%
+  column_to_rownames("mz_rt") %>% 
+  as.matrix()
+
+TAX_FULL <- tax_table(tax_mat_full)
+
+# metadata is the same 
+
+# merge everything for full phyloseq object 
+physeq_full <- phyloseq(OTU_FULL, TAX_FULL, SAMPLES)  
+
+# check 
+full_otu_df <- as.data.frame(otu_table(physeq_full))
+full_otu_df # looks good 
+
+tax_df_full <- as.data.frame(tax_table(physeq_full))
+tax_df_full # looks good 
+
+sample_df <- as.data.frame(sample_data(physeq_full))
+sample_df # looks good; sample IDs are in the order that the OTU table is in 
+
+# save 
+save(physeq_full, file="~/Desktop/FDA_Lab/Experiment1/manuscript/data/phyloseq_full.Rdata")
+```
+
+
+```{r}
+### ordinate with jsd distance  
+pcoa_ord_jsd <- ordinate(physeq_full, method = "PCoA", distance = "jsd")
+
+unconstrained_ordination_jsd <- plot_ordination(physeq_full, pcoa_ord_jsd, type = "samples", color = "Stress_ID") +
+  geom_point(size = 4) +
+  theme_bw() + 
+  scale_color_manual(
+    values = c(
+        "Control" = "#e6194B",
+        "MP" = "#3cb44b",
+        "Drought" = "#ffe119",
+        "Herbicide" = "#4363d8",
+        "Antibiotic" = "#f58231",
+        "Drought_MP" = "#42d4f4",
+        "Antibiotic_MP" = "#f032e6",
+        "Herbicide_MP" = "#469990",
+        "Antibiotic_Herbicide" = "#9A6324",
+        "Drought_Herbicide" = "#800000",
+        "Antibiotic_Drought" = "#911eb4",
+        "Antibiotic_Drought_Herbicide" = "#bfef45", 
+        "Antibiotic_Drought_MP" = "#808000",
+        "Antibiotic_Herbicide_MP" = "#000075",
+        "Drought_Herbicide_MP" = "#a9a9a9", 
+        "Antibiotic_Drought_Herbicide_MP" = "#000000"
+    ))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/pcoa_jsd_ordination_metabolomics.svg", unconstrained_ordination_jsd)
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/pcoa_jsd_ordination_metabolomics.pdf", unconstrained_ordination_jsd, height = 8, width = 10)
+
+## investigating the small cluster in top right 
+ord_df <- plot_ordination(
+  physeq_full,
+  pcoa_ord_jsd,
+  type = "samples",
+  color = "Stress_ID",
+  justDF = TRUE
+)
+
+subset(ord_df, Axis.1 > 0.1 & Axis.2 > 0.1) # confirmed that they aren't from the same block... 
+```
+
+Variance partitioning 
+```{r}
+# PERMANOVA 
+dist_full <- phyloseq::distance(physeq_full, method = "jsd") 
+dist_full_mat <- as.matrix(dist_full)
+
+env_vars <- c("Stress_ID", "Depth.mm", "Average.Diameter.mm", "Number.of.Root.Tips", "Total.Root.Length.mm", "Root_Biomass", 
+                                             "Maximum.Number.of.Roots", "Maximum.Width.mm", "Width.to.Depth.Ratio", "Convex.Area.mm2", "Maximum.Diameter.mm", 
+                                             "Volume.mm3", "Average.Root.Orientation.deg", "Medium.Angle.Frequency")
+
+# test each variable individually 
+r2_values <- sapply(env_vars, function(var) {
+  adonis2(dist_full_mat ~ smd[[var]], permutatations = 999)$R2[1]
+})
+
+# rank by R2 (variation explained)
+rank_env <- data.frame(
+  Variable = env_vars, 
+  R2 = r2_values, 
+  P_value = sapply(env_vars, function(var) {
+    adonis2(dist_full_mat ~ smd[[var]], permutations = 999)$`Pr(>F)`[1]
+  })
+) %>% arrange(desc(R2)) 
+
+rank_env #R2 = % variation each variable explains 
+
+# rank for plotting
+rank_env <- rank_env %>% 
+  arrange(desc(R2)) %>% 
+  mutate(Variable = factor(Variable, levels = Variable), 
+         R2_pct = R2 * 100) # convert to percentage for plotting 
+
+variance_part <- ggplot(rank_env, aes(x = R2_pct, y = Variable)) + 
+  geom_col() +  
+  labs(x = "Variance Explained (%)")
+
+#ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/exudates_variance_part_metabolomics.svg", variance_part)
+#ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/exudates_variance_part_metabolomics.pdf", variance_part)
+```
+
+jsd full distance matrix 
+```{r}
+dist_jsd <- phyloseq::distance(physeq_full, "jsd") 
+dist_jsd_matrix <- as.matrix(dist_jsd)
+
+Stress <- sample_data(physeq_full)$Stress_ID
+
+# compute mean distance (and spread) from control to each treatment 
+control_label <- "Control"  
+treats          <- unique(Stress)
+other_treats    <- treats[treats != control_label]
+
+# Storage
+res_jsd <- data.frame(
+  Treatment = character(),
+  Distance_to_Control_jsd = numeric(),
+  SE = numeric(),
+  n_pairs = integer(),
+  stringsAsFactors = FALSE
+)
+
+for (trt in other_treats) {
+  # Indices of samples in Control
+  s_ctrl  <- which(Stress == control_label)
+  # Indices of samples in treatment `trt`
+  s_trt   <- which(Stress == trt)
+  
+  # All Control–Treatment distances (each Control rep vs each trt rep)
+  d_ctl_trt_jsd <- dist_jsd_matrix[s_ctrl, s_trt]
+  
+  # Mean and SE
+  m <- mean(d_ctl_trt_jsd)
+  se <- sd(d_ctl_trt_jsd) / sqrt(length(d_ctl_trt_jsd))
+  n_pairs <- length(d_ctl_trt_jsd)
+  
+  res_jsd <- rbind(res_jsd, data.frame(
+    Treatment = trt,
+    Distance_to_Control_jsd = m,
+    SE = se,
+    n_pairs = n_pairs, 
+    stringsAsFactors = FALSE
+  ))
+}
+
+# now add a column for the distance between each rep and the control 
+res_jsd$dist_to_mean_reps_jsd <- vector("list", nrow(res_jsd))
+
+for (i in 1:nrow(res_jsd)) {
+  trt <- res_jsd$Treatment[i]
+  s_ctrl <- which(Stress == control_label)
+  s_trt <- which(Stress == trt)
+  
+  mean_dist_per_trt_rep <- apply(dist_jsd_matrix[s_trt, s_ctrl, drop = FALSE], 1, mean) - res_jsd$Distance_to_Control_jsd[i]
+  res_jsd$dist_to_mean_reps_jsd[[i]] <- mean_dist_per_trt_rep
+}
+
+
+# sort x axis 
+treatment_order <- factor(c("MP", "Drought", "Herbicide", "Antibiotic",
+                          "Drought_MP", "Herbicide_MP", "Antibiotic_MP", 
+                          "Drought_Herbicide", "Antibiotic_Drought", "Antibiotic_Herbicide",
+                          "Drought_Herbicide_MP", "Antibiotic_Drought_MP", 
+                          "Antibiotic_Herbicide_MP", "Antibiotic_Drought_Herbicide", 
+                          "Antibiotic_Drought_Herbicide_MP"), 
+                         levels = c("MP", "Drought", "Herbicide", "Antibiotic",
+                                   "Drought_MP", "Herbicide_MP", "Antibiotic_MP", 
+                                   "Drought_Herbicide", "Antibiotic_Drought", "Antibiotic_Herbicide",
+                                   "Drought_Herbicide_MP", "Antibiotic_Drought_MP", 
+                                   "Antibiotic_Herbicide_MP", "Antibiotic_Drought_Herbicide", 
+                                   "Antibiotic_Drought_Herbicide_MP"))
+
+res_jsd$Treatment <- factor(res_jsd$Treatment, levels = levels(treatment_order))
+
+# plot with variation around the mean 
+jsd_mean_distances_se <- ggplot(res_jsd, aes(x = Treatment, y = Distance_to_Control_jsd)) +
+  geom_point(color = "black", size = 3) +
+  geom_errorbar(
+    aes(ymin = Distance_to_Control_jsd - SE,
+        ymax = Distance_to_Control_jsd + SE),
+    width = 0.2,
+    color = "black"
+  ) +
+  ylab("Mean JSD distance to Control") +
+  xlab("Treatment") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/jsd_mean_distances_se_metabolomics.svg", jsd_mean_distances_se)
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/jsd_mean_distances_se_metabolomics.pdf", jsd_mean_distances_se)
+# save data so you can plot together 
+metabolomic_jsd_data <- jsd_mean_distances_se$data
+saveRDS(metabolomic_jsd_data, file = "~/Desktop/FDA_Lab/Experiment1/manuscript/data/metabolomic_jsd_data.rds")
+
+# going back to the full distance matrix (before calculating the mean pair distance)
+
+#heatmap 
+# treatment level 
+dist_treat <- matrix(nrow = length(unique(Stress)), ncol = length(unique(Stress)))
+rownames(dist_treat) <- colnames(dist_treat) <- unique(Stress)
+
+for(i in 1:nrow(dist_treat)) {
+  for(j in 1:ncol(dist_treat)) {
+    trt1 <- rownames(dist_treat)[i]
+    trt2 <- colnames(dist_treat)[j]
+    s1 <- which(Stress == trt1)
+    s2 <- which(Stress == trt2)
+    dist_treat[i,j] <- mean(dist_jsd_matrix[s1, s2])
+  }
+}
+
+# force a treatment order 
+treatment_order_matrix <- c("Control", "MP", "Drought", "Herbicide", "Antibiotic",
+                          "Drought_MP", "Herbicide_MP", "Antibiotic_MP", 
+                          "Drought_Herbicide", "Antibiotic_Drought", "Antibiotic_Herbicide",
+                          "Drought_Herbicide_MP", "Antibiotic_Drought_MP", 
+                          "Antibiotic_Herbicide_MP", "Antibiotic_Drought_Herbicide", 
+                          "Antibiotic_Drought_Herbicide_MP")
+
+dist_treat <- dist_treat[treatment_order_matrix, ]
+dist_treat <- dist_treat[ , treatment_order_matrix]
+
+heatmap_jsd_distances <- pheatmap(dist_treat, 
+         main = "Mean JSD Distances",
+         cluster_rows = FALSE, cluster_cols = FALSE,
+         fontsize_row = 9, fontsize_col = 9) 
+
+# only upper triangle 
+half_dist_treat <- as.matrix(dist_treat)
+half_dist_treat[upper.tri(half_dist_treat, diag = FALSE)] <- NA
+
+# have to use the package ComplexHeatmap
+simplified_heatmap <- Heatmap(half_dist_treat, 
+        name = "Mean JSD Distances", 
+        row_names_side = "left", 
+        column_names_side = "bottom", 
+        na_col = "white", 
+        cluster_columns = FALSE, 
+        cluster_rows = FALSE)
+
+pdf("~/Desktop/FDA_Lab/Experiment1/plots/exudate_heatmap_jsd_metabolomics.pdf", width = 8, height = 6)
+draw(simplified_heatmap)
+dev.off()
+```
+
+jsd distance to component stresses
+```{r}
+# remember that we already calculated the distance matrix with jsd distance. Double check you have it 
+dist_jsd_matrix
+
+#### for dual-stress ####
+## MP + Drought ## 
+# labels 
+Stress_ID <- sample_data(physeq_full)$Stress_ID
+inds_MP         <- which(Stress_ID == "MP")
+inds_Drought    <- which(Stress_ID == "Drought")
+inds_Drought_MP <- which(Stress_ID == "Drought_MP")
+
+# get all distances between drought_MP and MP
+d_DMP_MP <- dist_jsd_matrix[inds_Drought_MP, inds_MP]
+c(length(d_DMP_MP), head(d_DMP_MP))
+
+mean(d_DMP_MP)
+sd(d_DMP_MP)
+
+# repeat for drought 
+d_DMP_D <- dist_jsd_matrix[inds_Drought_MP, inds_Drought]
+mean(d_DMP_D)
+sd(d_DMP_D)
+
+drought_mp_distances <- data.frame(
+  treatment = c("MP",
+                 "Drought"),
+  mean_dist  = c(mean(d_DMP_MP), mean(d_DMP_D)),
+  SE         = c(sd(d_DMP_MP, na.rm = TRUE) / sqrt(length(d_DMP_MP)),
+                  sd(d_DMP_D,  na.rm = TRUE) / sqrt(length(d_DMP_D)))
+)
+
+# plot   
+DRMP_jsd_distance <- ggplot(drought_mp_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  labs(y = "Mean JSD Pairwise Distance") + 
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Drought + MP") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+drought_mp_metabolomics_d <- DRMP_jsd_distance$data
+saveRDS(drought_mp_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/drought_mp_metabolomics_d.rds")
+
+
+## MP + AB ## 
+# labels 
+inds_Antibiotic <- which(Stress_ID == "Antibiotic")
+inds_Antibiotic_MP <- which(Stress_ID == "Antibiotic_MP")
+
+# get all distances between drought_MP and MP
+d_ABMP_MP <- dist_jsd_matrix[inds_Antibiotic_MP, inds_MP]
+# repeat for drought 
+d_ABMP_AB <- dist_jsd_matrix[inds_Antibiotic_MP, inds_Antibiotic]
+
+antibiotic_mp_distances <- data.frame(
+  treatment = c("MP",
+                 "Antibiotic"),
+  mean_dist  = c(mean(d_ABMP_MP), mean(d_ABMP_AB)),
+  SE         = c(sd(d_ABMP_MP, na.rm = TRUE) / sqrt(length(d_ABMP_MP)),
+                  sd(d_ABMP_AB,  na.rm = TRUE) / sqrt(length(d_ABMP_AB)))
+)
+
+# plot 
+ABMP_jsd_distance <- ggplot(antibiotic_mp_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  theme(axis.title.y = element_blank()) +
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Antibiotic + MP") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+antibiotic_mp_metabolomics_d <- ABMP_jsd_distance$data
+saveRDS(antibiotic_mp_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_mp_metabolomics_d.rds")
+
+## MP + HB ## 
+# labels 
+inds_Herbicide <- which(Stress_ID == "Herbicide")
+inds_Herbicide_MP <- which(Stress_ID == "Herbicide_MP")
+
+# get all distances between drought_MP and MP
+d_HBMP_MP <- dist_jsd_matrix[inds_Herbicide_MP, inds_MP]
+# repeat for drought 
+d_HBMP_HB <- dist_jsd_matrix[inds_Herbicide_MP, inds_Herbicide]
+
+herbicide_mp_distances <- data.frame(
+  treatment = c("MP",
+                 "Herbicide"),
+  mean_dist  = c(mean(d_HBMP_MP), mean(d_HBMP_HB)),
+  SE         = c(sd(d_HBMP_MP, na.rm = TRUE) / sqrt(length(d_HBMP_MP)),
+                  sd(d_HBMP_HB,  na.rm = TRUE) / sqrt(length(d_HBMP_HB)))
+)
+
+# plot 
+HBMP_jsd_distance <- ggplot(herbicide_mp_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  theme(axis.title.y = element_blank()) + 
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Herbicide + MP") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+herbicide_mp_metabolomics_d <- HBMP_jsd_distance$data
+saveRDS(herbicide_mp_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/herbicide_mp_metabolomics_d.rds")
+
+## AB + HB ## 
+# labels 
+inds_Antibiotic_Herbicide <- which(Stress_ID == "Antibiotic_Herbicide")
+
+# get all distances between drought_MP and MP
+d_ABHB_AB <- dist_jsd_matrix[inds_Antibiotic_Herbicide, inds_Antibiotic]
+# repeat for drought 
+d_ABHB_HB <- dist_jsd_matrix[inds_Antibiotic_Herbicide, inds_Herbicide]
+
+antibiotic_herbicide_distances <- data.frame(
+  treatment = c("Antibiotic",
+                 "Herbicide"),
+  mean_dist  = c(mean(d_ABHB_AB), mean(d_ABHB_HB)),
+  SE         = c(sd(d_ABHB_AB, na.rm = TRUE) / sqrt(length(d_ABHB_AB)),
+                  sd(d_ABHB_HB,  na.rm = TRUE) / sqrt(length(d_ABHB_HB)))
+)
+
+# plot 
+ABHB_jsd_distance <- ggplot(antibiotic_herbicide_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  labs(x = "Component Stress Treatments",
+    y = "Mean JSD Pairwise Distance") + 
+  ggtitle("Antibiotic + Herbicide") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+antibiotic_herbicide_metabolomics_d <- ABHB_jsd_distance$data
+saveRDS(antibiotic_herbicide_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_herbicide_metabolomics_d.rds")
+
+## DR + HB ## 
+# labels 
+inds_Drought_Herbicide <- which(Stress_ID == "Drought_Herbicide")
+
+# get all distances between drought_MP and MP
+d_DRHB_DR <- dist_jsd_matrix[inds_Drought_Herbicide, inds_Drought]
+# repeat for drought 
+d_DRHB_HB <- dist_jsd_matrix[inds_Drought_Herbicide, inds_Herbicide]
+
+drought_herbicide_distances <- data.frame(
+  treatment = c("Drought",
+                 "Herbicide"),
+  mean_dist  = c(mean(d_DRHB_DR), mean(d_DRHB_HB)),
+  SE         = c(sd(d_DRHB_DR, na.rm = TRUE) / sqrt(length(d_DRHB_DR)),
+                  sd(d_DRHB_HB,  na.rm = TRUE) / sqrt(length(d_DRHB_HB)))
+)
+
+# plot 
+DRHB_jsd_distance <- ggplot(drought_herbicide_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  labs(x = "Component Stress Treatments") + 
+  theme(axis.title.y = element_blank()) +
+  ggtitle("Drought + Herbicide") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+drought_herbicide_metabolomics_d <- DRHB_jsd_distance$data
+saveRDS(drought_herbicide_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/drought_herbicide_metabolomics_d.rds")
+
+## DR + AB ## 
+# labels 
+inds_Antibiotic_Drought <- which(Stress_ID == "Antibiotic_Drought")
+
+# get all distances between drought_MP and MP
+d_ABDR_DR <- dist_jsd_matrix[inds_Antibiotic_Drought, inds_Drought]
+# repeat for drought 
+d_ABDR_AB <- dist_jsd_matrix[inds_Antibiotic_Drought, inds_Antibiotic]
+
+antibiotic_drought_distances <- data.frame(
+  treatment = c("Antibiotic",
+                 "Drought"),
+  mean_dist  = c(mean(d_ABDR_AB), mean(d_ABDR_DR)),
+  SE         = c(sd(d_ABDR_AB, na.rm = TRUE) / sqrt(length(d_ABDR_AB)),
+                  sd(d_ABDR_DR,  na.rm = TRUE) / sqrt(length(d_ABDR_DR)))
+)
+
+# plot 
+ABDR_jsd_distance <- ggplot(antibiotic_drought_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  labs(x = "Component Stress Treatments") +
+  theme(axis.title.y = element_blank()) +
+  ggtitle("Antibiotic + Drought") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+antibiotic_drought_metabolomics_d <- ABDR_jsd_distance$data
+saveRDS(antibiotic_drought_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_drought_metabolomics_d.rds")
+
+### arrange dual stress plots ### 
+two_stress_jsd_plots <- ggarrange(DRMP_jsd_distance, ABMP_jsd_distance, HBMP_jsd_distance, ABHB_jsd_distance, DRHB_jsd_distance, ABDR_jsd_distance,
+          ncol = 3, nrow = 2)
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/two_stress_jsd_metabolomics.svg", two_stress_jsd_plots,width = 14, height = 6)
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/two_stress_jsd_metabolomics.pdf", two_stress_jsd_plots,width = 14, height = 6)
+
+### 3-way stresses ### 
+## DR + AB + MP ## 
+# labels 
+inds_Antibiotic_Drought_MP <- which(Stress_ID == "Antibiotic_Drought_MP")
+
+# get all distances 
+d_ABDRMP_DRMP <- dist_jsd_matrix[inds_Antibiotic_Drought_MP, inds_Drought_MP]
+d_ABDRMP_ABMP <- dist_jsd_matrix[inds_Antibiotic_Drought_MP, inds_Antibiotic_MP]
+d_ABDRMP_ABDR <- dist_jsd_matrix[inds_Antibiotic_Drought_MP, inds_Antibiotic_Drought]
+
+antibiotic_drought_mp_distances <- data.frame(
+  treatment = c("Drought_MP", "Antibiotic_MP", "Antibiotic_Drought"),
+  mean_dist  = c(mean(d_ABDRMP_DRMP), mean(d_ABDRMP_ABMP), mean(d_ABDRMP_ABDR)),
+  SE         = c(sd(d_ABDRMP_DRMP, na.rm = TRUE) / sqrt(length(d_ABDRMP_DRMP)),
+                  sd(d_ABDRMP_ABMP,  na.rm = TRUE) / sqrt(length(d_ABDRMP_ABMP)), 
+                 sd(d_ABDRMP_ABDR, na.rm = TRUE) / sqrt(length(d_ABDRMP_ABDR)))
+)
+
+# plot 
+ABDRMP_jsd_distance <- ggplot(antibiotic_drought_mp_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  labs(y = "Mean JSD Pairwise Distance") +
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Antibiotic + Drought + MP") +
+  theme(plot.title = element_text(hjust = 0.5))
+  
+antibiotic_drought_mp_metabolomics_d <- ABDRMP_jsd_distance$data
+saveRDS(antibiotic_drought_mp_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_drought_mp_metabolomics_d.rds")
+
+
+## MP + DR + HB ## 
+# labels 
+inds_Drought_Herbicide_MP <- which(Stress_ID == "Drought_Herbicide_MP")
+
+# get all distances 
+d_DRHBMP_DRMP <- dist_jsd_matrix[inds_Drought_Herbicide_MP, inds_Drought_MP]
+d_DRHBMP_HBMP <- dist_jsd_matrix[inds_Drought_Herbicide_MP, inds_Herbicide_MP]
+d_DRHBMP_DRHB <- dist_jsd_matrix[inds_Drought_Herbicide_MP, inds_Drought_Herbicide]
+
+drought_herbicide_mp_distances <- data.frame(
+  treatment = c("Drought_MP", "Herbicide_MP", "Drought_Herbicide"),
+  mean_dist  = c(mean(d_DRHBMP_DRMP), mean(d_DRHBMP_HBMP), mean(d_DRHBMP_DRHB)),
+  SE         = c(sd(d_DRHBMP_DRMP, na.rm = TRUE) / sqrt(length(d_DRHBMP_DRMP)),
+                  sd(d_DRHBMP_HBMP,  na.rm = TRUE) / sqrt(length(d_DRHBMP_HBMP)), 
+                 sd(d_DRHBMP_DRHB, na.rm = TRUE) / sqrt(length(d_DRHBMP_DRHB)))
+)
+
+# plot 
+DRHBMP_jsd_distance <- ggplot(drought_herbicide_mp_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  theme(axis.title.y = element_blank()) + 
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Drought + Herbicide + MP") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+drought_herbicide_mp_metabolomics_d <- DRHBMP_jsd_distance$data
+saveRDS(drought_herbicide_mp_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/drought_herbicide_mp_metabolomics_d.rds")
+
+## AB + HB + MP ## 
+# labels 
+inds_Antibiotic_Herbicide_MP <- which(Stress_ID == "Antibiotic_Herbicide_MP")
+
+# get all distances 
+d_ABHBMP_ABMP <- dist_jsd_matrix[inds_Antibiotic_Herbicide_MP, inds_Antibiotic_MP]
+d_ABHBMP_HBMP <- dist_jsd_matrix[inds_Antibiotic_Herbicide_MP, inds_Herbicide_MP]
+d_ABHBMP_ABHB <- dist_jsd_matrix[inds_Antibiotic_Herbicide_MP, inds_Antibiotic_Herbicide]
+
+antibiotic_herbicide_mp_distances <- data.frame(
+  treatment = c("Antibiotic_MP", "Herbicide_MP", "Antibiotic_Herbicide"),
+  mean_dist  = c(mean(d_ABHBMP_ABMP), mean(d_ABHBMP_HBMP), mean(d_ABHBMP_ABHB)),
+  SE         = c(sd(d_ABHBMP_ABMP, na.rm = TRUE) / sqrt(length(d_ABHBMP_ABMP)),
+                  sd(d_ABHBMP_HBMP,  na.rm = TRUE) / sqrt(length(d_ABHBMP_HBMP)), 
+                 sd(d_ABHBMP_ABHB, na.rm = TRUE) / sqrt(length(d_ABHBMP_ABHB)))
+)
+
+# plot 
+ABHBMP_jsd_distance <- ggplot(antibiotic_herbicide_mp_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  labs(x = "Component Stress Treatments",
+    y = "Mean JSD Pairwise Distance") +
+  ggtitle("Antibiotic + Herbicide + MP") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+antibiotic_herbicide_mp_metabolomics_d <- ABHBMP_jsd_distance$data
+saveRDS(antibiotic_herbicide_mp_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_herbicide_mp_metabolomics_d.rds")
+
+## AB + DR + HB ## 
+# labels 
+inds_Antibiotic_Drought_Herbicide <- which(Stress_ID == "Antibiotic_Drought_Herbicide")
+
+# get all distances 
+d_ABDRHB_ABHB <- dist_jsd_matrix[inds_Antibiotic_Drought_Herbicide, inds_Antibiotic_Herbicide]
+d_ABDRHB_DRHB <- dist_jsd_matrix[inds_Antibiotic_Drought_Herbicide, inds_Drought_Herbicide]
+d_ABDRHB_ABDR <- dist_jsd_matrix[inds_Antibiotic_Drought_Herbicide, inds_Antibiotic_Drought]
+
+antibiotic_drought_herbicide_distances <- data.frame(
+  treatment = c("Antibiotic_Herbicide", "Drought_Herbicide", "Antibiotic_Drought"),
+  mean_dist  = c(mean(d_ABDRHB_ABHB), mean(d_ABDRHB_DRHB), mean(d_ABDRHB_ABDR)),
+  SE         = c(sd(d_ABDRHB_ABHB, na.rm = TRUE) / sqrt(length(d_ABDRHB_ABHB)),
+                  sd(d_ABDRHB_DRHB,  na.rm = TRUE) / sqrt(length(d_ABDRHB_DRHB)), 
+                 sd(d_ABDRHB_ABDR, na.rm = TRUE) / sqrt(length(d_ABDRHB_ABDR)))
+)
+
+# plot 
+ABDRHB_jsd_distance <- ggplot(antibiotic_drought_herbicide_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  labs(x = "Component Stress Treatments") +
+  theme(axis.title.y = element_blank()) + 
+  ggtitle("Antibiotic + Drought + Herbicide") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+antibiotic_drought_herbicide_metabolomics_d <- ABDRHB_jsd_distance$data
+saveRDS(antibiotic_drought_herbicide_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_drought_herbicide_metabolomics_d.rds")
+
+### arrange 3 stress plots ### 
+three_stress_jsd_plots <- ggarrange(ABDRMP_jsd_distance, DRHBMP_jsd_distance, ABHBMP_jsd_distance, ABDRHB_jsd_distance,
+          ncol = 2, nrow = 2)
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/three_stress_jsd_metabolomics.svg", three_stress_jsd_plots, width = 14, height = 6)
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/three_stress_jsd_metabolomics.pdf", three_stress_jsd_plots, width = 14, height = 6)
+
+#### 4 stress #### 
+## AB + DR + HB + MP ## 
+# labels 
+inds_Antibiotic_Drought_Herbicide_MP <- which(Stress_ID == "Antibiotic_Drought_Herbicide_MP")
+
+# get all distances 
+d_ABDRHBMP_ABDRMP <- dist_jsd_matrix[inds_Antibiotic_Drought_Herbicide_MP, inds_Antibiotic_Drought_MP]
+d_ABDRHBMP_DRHBMP <- dist_jsd_matrix[inds_Antibiotic_Drought_Herbicide_MP, inds_Drought_Herbicide_MP]
+d_ABDRHBMP_ABHBMP <- dist_jsd_matrix[inds_Antibiotic_Drought_Herbicide_MP, inds_Antibiotic_Herbicide_MP]
+d_ABDRHBMP_ABDRHB <- dist_jsd_matrix[inds_Antibiotic_Drought_Herbicide_MP, inds_Antibiotic_Drought_Herbicide]
+
+antibiotic_drought_herbicide_mp_distances <- data.frame(
+  treatment = c("Antibiotic_Drought_MP", "Drought_Herbicide_MP", "Antibiotic_Herbicide_MP", "Antibiotic_Drought_Herbicide"),
+  mean_dist  = c(mean(d_ABDRHBMP_ABDRMP), mean(d_ABDRHBMP_DRHBMP), mean(d_ABDRHBMP_ABHBMP), mean(d_ABDRHBMP_ABDRHB)),
+  SE         = c(sd(d_ABDRHBMP_ABDRMP, na.rm = TRUE) / sqrt(length(d_ABDRHBMP_ABDRMP)),
+                  sd(d_ABDRHBMP_DRHBMP,  na.rm = TRUE) / sqrt(length(d_ABDRHBMP_DRHBMP)), 
+                 sd(d_ABDRHBMP_ABHBMP, na.rm = TRUE) / sqrt(length(d_ABDRHBMP_ABHBMP)), 
+                 sd(d_ABDRHBMP_ABDRHB, na.rm = TRUE) / sqrt(length(d_ABDRHBMP_ABDRHB)))
+)
+
+# plot 
+all_four_jsd_distance <- ggplot(antibiotic_drought_herbicide_mp_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  labs(x = "Component Stress Treatments",
+    y = "Mean JSD Pairwise Distance") + 
+    ggtitle("Antibiotic + Drought + Herbicide + MP") +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/all_four_jsd_distance_metabolomics.svg", all_four_jsd_distance, width = 8, height = 5) 
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/all_four_jsd_distance_metabolomics.pdf", all_four_jsd_distance, width = 8, height = 5)
+
+allfour_metabolomics_d <- all_four_jsd_distance$data
+saveRDS(allfour_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/allfour_metabolomics_d.rds")
+```
+
