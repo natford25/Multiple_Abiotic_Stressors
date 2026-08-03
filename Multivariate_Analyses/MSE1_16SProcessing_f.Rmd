@@ -26,7 +26,7 @@ library(tidyverse)
 
 #1. Taxonomy inspect
 ```{r}
-load("~/Desktop/FDA_Lab/Experiment1/data/dada2_env_taxa_genus.RData")
+load("~/dada2_env_taxa_genus.RData")
 taxa.print <- taxa # Removing sequence rownames for display only
 rownames(taxa.print) <- NULL
 head(taxa.print)
@@ -34,9 +34,9 @@ head(taxa.print)
 
 Export
 ```{r}
-write.csv(seqtab.nochim, file = "~/Desktop/FDA_Lab/Experiment1/MicrobiomeProcessing4/asv_table_16S.csv")
-write.csv(taxa, file = "~/Desktop/FDA_Lab/Experiment1/MicrobiomeProcessing4/tax_table_16S.csv")
-save.image("~/Desktop/FDA_Lab/Experiment1/MicrobiomeProcessing4/dada2_env_taxa_genus_complete.RData")
+write.csv(seqtab.nochim, file = "~/asv_table_16S.csv")
+write.csv(taxa, file = "~/tax_table_16S.csv")
+save.image("~/dada2_env_taxa_genus_complete.RData")
 ```
 
 #create phyloseq object
@@ -54,8 +54,6 @@ library(readr)
 
 #1. Input the files and format
 ```{r}
-#load("~/Desktop/FDA_Lab/Experiment1/MicrobiomeProcessing4/dada2_env_taxa_genus_complete.RData")
-
 # Read in taxa asv table
 asv <- seqtab.nochim
 asv <- t(asv) # transpose (rows <-> columns)  
@@ -84,14 +82,14 @@ subject <- sapply(strsplit(samples.out, "D"), `[`, 1)
 
 ## Create SAMPLE DATAFRAME ##
 #Preparing samdf = sample dataframe with features of samples, i.e. site, season, depth, etc
-max=read.csv("~/Desktop/FDA_Lab/Experiment1/data/FINAL_METADATA_SHEET.csv", header = TRUE )
+max=read.csv("~/MSE1_metadata.csv", header = TRUE )
 
 saveRDS(max, file = "samdf.rds")
 
 samdf_phy <- readRDS("samdf.rds")
 nrow(samdf_phy) #check number of rows
 
-#remove sample ID 59 and 114 (they died during the experiment and have no data associated with them) # do this later ? 
+#remove sample ID 59 and 114 (they died during the experiment and have no data associated with them) 
 samdf_phy2 <- samdf_phy[-c(59, 114), ]
 
 # make sure rownames of metadata match column names of ASV table 
@@ -111,8 +109,7 @@ physeq <- phyloseq(otu_table(asv, taxa_are_rows = FALSE), # samples are rows
 ```
 
 ```{r}
-save(physeq, file="~/Desktop/FDA_Lab/Experiment1/MicrobiomeProcessing4/phyloseq_original.Rdata")
-#load("~/Desktop/FDA_Lab/Experiment1/MicrobiomeProcessing4/phyloseq_original.Rdata")
+save(physeq, file="~/phyloseq_original.Rdata")
 sum(sample_sums(physeq)) #23229069 reads across all samples before filtering
 ntaxa(physeq) #259076 ASVs before filtering
 ```
@@ -149,7 +146,7 @@ phyloseq_clean2 <- prune_taxa(prev > 7, ps)            # drop ASVs seen in less 
 ntaxa(phyloseq_clean2) #12313 ASVs 
 sum(sample_sums(phyloseq_clean2)) # 20,325,685 reads 
 
-save(phyloseq_clean2, file="~/Desktop/FDA_Lab/Experiment1/MicrobiomeProcessing4/phyloseq_clean.Rdata")
+save(phyloseq_clean2, file="~/phyloseq_clean.Rdata")
 
 #That removes any ASV that appears in less than 7 samples (regardless of its read count).
 ```
@@ -175,16 +172,15 @@ selected_rare <- phyloseq_clean2
 
 #select the 
 sort(sample_sums(phyloseq_clean2)) #50,000
-#rarefy at 50,000; IDs 180, 179, 178, 181, 183 are negative controls and will be removed from dataset anyway
+#rarefy at 50,000
 
 #rarefy
 #install.packages('devtools')
 #devtools::install_github("GuillemSalazar/EcolUtils")
 require(EcolUtils)
 
-#reads removed <=4
 asv_tab_reads <- data.frame(otu_table(selected_rare)) #extract
-asv_tab_rare <- rrarefy.perm(x = asv_tab_reads , sample = 50000, n = 1000, round.out = T) #use n=1000
+asv_tab_rare <- rrarefy.perm(x = asv_tab_reads , sample = 50000, n = 1000, round.out = T) 
 
 rowSums(asv_tab_rare)
 
@@ -204,7 +200,7 @@ View(otu_table(selected_rare)[1:10, 1:10])
 ```{r}
 physeq_rare <- selected_rare
 
-save(physeq_rare, file="~/Desktop/FDA_Lab/Experiment1/MicrobiomeProcessing3/phyloseq_rarefied.Rdata")
+save(physeq_rare, file="~/phyloseq_rarefied.Rdata")
 ```
 
 
