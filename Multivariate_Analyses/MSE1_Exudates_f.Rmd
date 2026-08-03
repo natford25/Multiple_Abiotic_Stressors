@@ -436,43 +436,6 @@ unconstrained_ordination_jsd <- plot_ordination(physeq_full, pcoa_ord_jsd, type 
 ggsave("~/pcoa_jsd_ordination_metabolomics.pdf", unconstrained_ordination_jsd, height = 8, width = 10)
 ```
 
-Variance partitioning 
-```{r}
-# PERMANOVA 
-dist_full <- phyloseq::distance(physeq_full, method = "jsd") 
-dist_full_mat <- as.matrix(dist_full)
-
-env_vars <- c("Stress_ID", "Depth.mm", "Average.Diameter.mm", "Number.of.Root.Tips", "Total.Root.Length.mm", "Root_Biomass", 
-                                             "Maximum.Number.of.Roots", "Maximum.Width.mm", "Width.to.Depth.Ratio", "Convex.Area.mm2", "Maximum.Diameter.mm", 
-                                             "Volume.mm3", "Average.Root.Orientation.deg", "Medium.Angle.Frequency")
-
-# test each variable individually 
-r2_values <- sapply(env_vars, function(var) {
-  adonis2(dist_full_mat ~ smd[[var]], permutatations = 999)$R2[1]
-})
-
-# rank by R2 (variation explained)
-rank_env <- data.frame(
-  Variable = env_vars, 
-  R2 = r2_values, 
-  P_value = sapply(env_vars, function(var) {
-    adonis2(dist_full_mat ~ smd[[var]], permutations = 999)$`Pr(>F)`[1]
-  })
-) %>% arrange(desc(R2)) 
-
-rank_env #R2 = % variation each variable explains 
-
-# rank for plotting
-rank_env <- rank_env %>% 
-  arrange(desc(R2)) %>% 
-  mutate(Variable = factor(Variable, levels = Variable), 
-         R2_pct = R2 * 100) # convert to percentage for plotting 
-
-variance_part <- ggplot(rank_env, aes(x = R2_pct, y = Variable)) + 
-  geom_col() +  
-  labs(x = "Variance Explained (%)")
-```
-
 jsd full distance matrix 
 ```{r}
 dist_jsd <- phyloseq::distance(physeq_full, "jsd") 
