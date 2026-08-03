@@ -9,15 +9,17 @@ Concurrent environmental stressors are increasingly common and interact in non-a
 
 ## Phenotypic processing and analysis 
 * Main analysis conducted in <name of r file + link>
-* Analysis of root trait correlations conducted in <name of r file + link> 
 
 ## Bacterial processing and analysis 
-* Bacterial sequences were processed and filtered in <name of r file + link> 
+* Bacterial sequences were trimmed in [MSE1_dada2_cutadapt_f](MSE1_dada2_cutadapt_f)
+* Bacterial sequences were processed and filtered in [MSE1_dada2_processing_f](MSE1_dada2_processing_f)
+* Taxonomy was assigned to bacterial sequences and rarefaction was performed in [MSE1_16S_Processing_f](MSE1_16S_Processing_f)
 * Main analysis conducted in <name of r file + link>
 
 ## Metabolomics processing and analysis 
-* Analysis conducted in <name of r file + link>
+* Data wrangling was conducted in <name of r file + link>
+* Quantification of total organic carbon in exudates performed in [MSE1_TOC](MSE1_TOC)
 
 ## Supplementary/Other information 
-* Confirmation of drought effects conducted in <name of r file + link>
+* Confirmation of drought effects conducted in [MSE1_Drought](MSE1_Drought)
 * 
