@@ -39,13 +39,13 @@ theme_set(theme_bw())
 ```{r}
 # import data (positive and negative mode data from GNPS2 export)
 # this is only annotated dataset 
-gnps2_neg_annotated <- read_tsv("~/Desktop/FDA_Lab/Experiment1/manuscript/data/MSE1_Full_Neg_results.tsv")
-gnps2_pos_annotated <- read_tsv("~/Desktop/FDA_Lab/Experiment1/manuscript/data/MSE1_Full_Pos_results.tsv")
+gnps2_neg_annotated <- read_tsv("~/MSE1_HILIC_Neg_results.tsv")
+gnps2_pos_annotated <- read_tsv("~/MSE1_HILIC_Pos_results.tsv")
 
 # import full quantification table from MZmine (both modes)
 # this is full dataset 
-mzmine_neg_full <- read_csv("~/Desktop/FDA_Lab/Experiment1/manuscript/data/MSE1_Negative_spectra_quant.csv")
-mzmine_pos_full <- read_csv("~/Desktop/FDA_Lab/Experiment1/manuscript/data/MSE1_Positive_spectra_quant.csv")
+mzmine_neg_full <- read_csv("~/MSE1_Negative_spectra_quant.csv")
+mzmine_pos_full <- read_csv("~/MSE1_Positive_spectra_quant.csv")
 
 # need to rename some columns from the mzmine files
 # they are currently named after the original raw files, followed by Peak area 
@@ -63,7 +63,7 @@ mzmine_neg_renamed <- mzmine_neg_full %>%
     .cols = contains("1x150mm")
   ) # this is to deal with the other pattern 
 
-# verify this worked :)
+# verify this worked
 names(mzmine_neg_renamed) 
 
 
@@ -80,7 +80,7 @@ mzmine_pos_renamed <- mzmine_pos_full %>%
     .cols = contains("1x150mm")
   ) 
 
-# verify this worked :)
+# verify this worked
 names(mzmine_pos_renamed) 
 
 
@@ -149,12 +149,12 @@ full_merged <- full_merged %>%
     `8` = `08`
   )
 
-write_tsv(full_merged, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/full_merged.tsv")
+write_tsv(full_merged, "~/metabolomics_full_merged.tsv")
 ```
 
 ```{r}
 # import metadata 
-x <- read_xlsx("~/Desktop/FDA_Lab/Experiment1/manuscript/data/FINAL_METADATA_SHEET.xlsx")
+x <- read_xlsx("~/MSE1_metadata.xlsx")
 
 # remove sample IDs 59 and 114 because they did not survive the experiment and there is no data associated with them 
 x <- x %>% filter(ID !=59)
@@ -316,7 +316,7 @@ sample_df <- as.data.frame(sample_data(physeq_annotated))
 sample_df # looks good; sample IDs are in the order that the OTU table is in 
 
 # save 
-save(physeq_annotated, file="~/Desktop/FDA_Lab/Experiment1/manuscript/data/phyloseq_annotated.Rdata")
+save(physeq_annotated, file="~/exudates_phyloseq_annotated.Rdata")
 ```
 
 ```{r}
@@ -402,7 +402,7 @@ sample_df <- as.data.frame(sample_data(physeq_full))
 sample_df # looks good; sample IDs are in the order that the OTU table is in 
 
 # save 
-save(physeq_full, file="~/Desktop/FDA_Lab/Experiment1/manuscript/data/phyloseq_full.Rdata")
+save(physeq_full, file="~/exudates_phyloseq_full.Rdata")
 ```
 
 
@@ -433,19 +433,7 @@ unconstrained_ordination_jsd <- plot_ordination(physeq_full, pcoa_ord_jsd, type 
         "Antibiotic_Drought_Herbicide_MP" = "#000000"
     ))
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/pcoa_jsd_ordination_metabolomics.svg", unconstrained_ordination_jsd)
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/pcoa_jsd_ordination_metabolomics.pdf", unconstrained_ordination_jsd, height = 8, width = 10)
-
-## investigating the small cluster in top right 
-ord_df <- plot_ordination(
-  physeq_full,
-  pcoa_ord_jsd,
-  type = "samples",
-  color = "Stress_ID",
-  justDF = TRUE
-)
-
-subset(ord_df, Axis.1 > 0.1 & Axis.2 > 0.1) # confirmed that they aren't from the same block... 
+ggsave("~/pcoa_jsd_ordination_metabolomics.pdf", unconstrained_ordination_jsd, height = 8, width = 10)
 ```
 
 Variance partitioning 
@@ -483,9 +471,6 @@ rank_env <- rank_env %>%
 variance_part <- ggplot(rank_env, aes(x = R2_pct, y = Variable)) + 
   geom_col() +  
   labs(x = "Variance Explained (%)")
-
-#ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/exudates_variance_part_metabolomics.svg", variance_part)
-#ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/exudates_variance_part_metabolomics.pdf", variance_part)
 ```
 
 jsd full distance matrix 
@@ -574,61 +559,9 @@ jsd_mean_distances_se <- ggplot(res_jsd, aes(x = Treatment, y = Distance_to_Cont
   xlab("Treatment") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/jsd_mean_distances_se_metabolomics.svg", jsd_mean_distances_se)
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/jsd_mean_distances_se_metabolomics.pdf", jsd_mean_distances_se)
-# save data so you can plot together 
+# save data to plot together with microbiome data
 metabolomic_jsd_data <- jsd_mean_distances_se$data
-saveRDS(metabolomic_jsd_data, file = "~/Desktop/FDA_Lab/Experiment1/manuscript/data/metabolomic_jsd_data.rds")
-
-# going back to the full distance matrix (before calculating the mean pair distance)
-
-#heatmap 
-# treatment level 
-dist_treat <- matrix(nrow = length(unique(Stress)), ncol = length(unique(Stress)))
-rownames(dist_treat) <- colnames(dist_treat) <- unique(Stress)
-
-for(i in 1:nrow(dist_treat)) {
-  for(j in 1:ncol(dist_treat)) {
-    trt1 <- rownames(dist_treat)[i]
-    trt2 <- colnames(dist_treat)[j]
-    s1 <- which(Stress == trt1)
-    s2 <- which(Stress == trt2)
-    dist_treat[i,j] <- mean(dist_jsd_matrix[s1, s2])
-  }
-}
-
-# force a treatment order 
-treatment_order_matrix <- c("Control", "MP", "Drought", "Herbicide", "Antibiotic",
-                          "Drought_MP", "Herbicide_MP", "Antibiotic_MP", 
-                          "Drought_Herbicide", "Antibiotic_Drought", "Antibiotic_Herbicide",
-                          "Drought_Herbicide_MP", "Antibiotic_Drought_MP", 
-                          "Antibiotic_Herbicide_MP", "Antibiotic_Drought_Herbicide", 
-                          "Antibiotic_Drought_Herbicide_MP")
-
-dist_treat <- dist_treat[treatment_order_matrix, ]
-dist_treat <- dist_treat[ , treatment_order_matrix]
-
-heatmap_jsd_distances <- pheatmap(dist_treat, 
-         main = "Mean JSD Distances",
-         cluster_rows = FALSE, cluster_cols = FALSE,
-         fontsize_row = 9, fontsize_col = 9) 
-
-# only upper triangle 
-half_dist_treat <- as.matrix(dist_treat)
-half_dist_treat[upper.tri(half_dist_treat, diag = FALSE)] <- NA
-
-# have to use the package ComplexHeatmap
-simplified_heatmap <- Heatmap(half_dist_treat, 
-        name = "Mean JSD Distances", 
-        row_names_side = "left", 
-        column_names_side = "bottom", 
-        na_col = "white", 
-        cluster_columns = FALSE, 
-        cluster_rows = FALSE)
-
-pdf("~/Desktop/FDA_Lab/Experiment1/plots/exudate_heatmap_jsd_metabolomics.pdf", width = 8, height = 6)
-draw(simplified_heatmap)
-dev.off()
+saveRDS(metabolomic_jsd_data, file = "~/metabolomic_jsd_data.rds")
 ```
 
 jsd distance to component stresses
@@ -664,21 +597,8 @@ drought_mp_distances <- data.frame(
                   sd(d_DMP_D,  na.rm = TRUE) / sqrt(length(d_DMP_D)))
 )
 
-# plot   
-DRMP_jsd_distance <- ggplot(drought_mp_distances, aes(x = treatment, y = mean_dist)) +
-  geom_point(size = 3, colour = "black") +
-  geom_errorbar(
-    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
-    width = 0.2,
-    colour = "black"
-  ) +
-  labs(y = "Mean JSD Pairwise Distance") + 
-  theme(axis.title.x = element_blank()) + 
-  ggtitle("Drought + MP") +
-  theme(plot.title = element_text(hjust = 0.5))
-
 drought_mp_metabolomics_d <- DRMP_jsd_distance$data
-saveRDS(drought_mp_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/drought_mp_metabolomics_d.rds")
+saveRDS(drought_mp_metabolomics_d, "~/drought_mp_metabolomics_d.rds")
 
 
 ## MP + AB ## 
@@ -699,21 +619,8 @@ antibiotic_mp_distances <- data.frame(
                   sd(d_ABMP_AB,  na.rm = TRUE) / sqrt(length(d_ABMP_AB)))
 )
 
-# plot 
-ABMP_jsd_distance <- ggplot(antibiotic_mp_distances, aes(x = treatment, y = mean_dist)) +
-  geom_point(size = 3, colour = "black") +
-  geom_errorbar(
-    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
-    width = 0.2,
-    colour = "black"
-  ) +
-  theme(axis.title.y = element_blank()) +
-  theme(axis.title.x = element_blank()) + 
-  ggtitle("Antibiotic + MP") +
-  theme(plot.title = element_text(hjust = 0.5))
-
 antibiotic_mp_metabolomics_d <- ABMP_jsd_distance$data
-saveRDS(antibiotic_mp_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_mp_metabolomics_d.rds")
+saveRDS(antibiotic_mp_metabolomics_d, "~/antibiotic_mp_metabolomics_d.rds")
 
 ## MP + HB ## 
 # labels 
@@ -733,21 +640,8 @@ herbicide_mp_distances <- data.frame(
                   sd(d_HBMP_HB,  na.rm = TRUE) / sqrt(length(d_HBMP_HB)))
 )
 
-# plot 
-HBMP_jsd_distance <- ggplot(herbicide_mp_distances, aes(x = treatment, y = mean_dist)) +
-  geom_point(size = 3, colour = "black") +
-  geom_errorbar(
-    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
-    width = 0.2,
-    colour = "black"
-  ) +
-  theme(axis.title.y = element_blank()) + 
-  theme(axis.title.x = element_blank()) + 
-  ggtitle("Herbicide + MP") +
-  theme(plot.title = element_text(hjust = 0.5))
-
 herbicide_mp_metabolomics_d <- HBMP_jsd_distance$data
-saveRDS(herbicide_mp_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/herbicide_mp_metabolomics_d.rds")
+saveRDS(herbicide_mp_metabolomics_d, "~/herbicide_mp_metabolomics_d.rds")
 
 ## AB + HB ## 
 # labels 
@@ -766,21 +660,8 @@ antibiotic_herbicide_distances <- data.frame(
                   sd(d_ABHB_HB,  na.rm = TRUE) / sqrt(length(d_ABHB_HB)))
 )
 
-# plot 
-ABHB_jsd_distance <- ggplot(antibiotic_herbicide_distances, aes(x = treatment, y = mean_dist)) +
-  geom_point(size = 3, colour = "black") +
-  geom_errorbar(
-    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
-    width = 0.2,
-    colour = "black"
-  ) +
-  labs(x = "Component Stress Treatments",
-    y = "Mean JSD Pairwise Distance") + 
-  ggtitle("Antibiotic + Herbicide") +
-  theme(plot.title = element_text(hjust = 0.5))
-
 antibiotic_herbicide_metabolomics_d <- ABHB_jsd_distance$data
-saveRDS(antibiotic_herbicide_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_herbicide_metabolomics_d.rds")
+saveRDS(antibiotic_herbicide_metabolomics_d, "~/antibiotic_herbicide_metabolomics_d.rds")
 
 ## DR + HB ## 
 # labels 
@@ -799,21 +680,8 @@ drought_herbicide_distances <- data.frame(
                   sd(d_DRHB_HB,  na.rm = TRUE) / sqrt(length(d_DRHB_HB)))
 )
 
-# plot 
-DRHB_jsd_distance <- ggplot(drought_herbicide_distances, aes(x = treatment, y = mean_dist)) +
-  geom_point(size = 3, colour = "black") +
-  geom_errorbar(
-    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
-    width = 0.2,
-    colour = "black"
-  ) +
-  labs(x = "Component Stress Treatments") + 
-  theme(axis.title.y = element_blank()) +
-  ggtitle("Drought + Herbicide") +
-  theme(plot.title = element_text(hjust = 0.5))
-
 drought_herbicide_metabolomics_d <- DRHB_jsd_distance$data
-saveRDS(drought_herbicide_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/drought_herbicide_metabolomics_d.rds")
+saveRDS(drought_herbicide_metabolomics_d, "~/drought_herbicide_metabolomics_d.rds")
 
 ## DR + AB ## 
 # labels 
@@ -832,28 +700,8 @@ antibiotic_drought_distances <- data.frame(
                   sd(d_ABDR_DR,  na.rm = TRUE) / sqrt(length(d_ABDR_DR)))
 )
 
-# plot 
-ABDR_jsd_distance <- ggplot(antibiotic_drought_distances, aes(x = treatment, y = mean_dist)) +
-  geom_point(size = 3, colour = "black") +
-  geom_errorbar(
-    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
-    width = 0.2,
-    colour = "black"
-  ) +
-  labs(x = "Component Stress Treatments") +
-  theme(axis.title.y = element_blank()) +
-  ggtitle("Antibiotic + Drought") +
-  theme(plot.title = element_text(hjust = 0.5))
-
 antibiotic_drought_metabolomics_d <- ABDR_jsd_distance$data
-saveRDS(antibiotic_drought_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_drought_metabolomics_d.rds")
-
-### arrange dual stress plots ### 
-two_stress_jsd_plots <- ggarrange(DRMP_jsd_distance, ABMP_jsd_distance, HBMP_jsd_distance, ABHB_jsd_distance, DRHB_jsd_distance, ABDR_jsd_distance,
-          ncol = 3, nrow = 2)
-
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/two_stress_jsd_metabolomics.svg", two_stress_jsd_plots,width = 14, height = 6)
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/two_stress_jsd_metabolomics.pdf", two_stress_jsd_plots,width = 14, height = 6)
+saveRDS(antibiotic_drought_metabolomics_d, "~/antibiotic_drought_metabolomics_d.rds")
 
 ### 3-way stresses ### 
 ## DR + AB + MP ## 
@@ -872,22 +720,9 @@ antibiotic_drought_mp_distances <- data.frame(
                   sd(d_ABDRMP_ABMP,  na.rm = TRUE) / sqrt(length(d_ABDRMP_ABMP)), 
                  sd(d_ABDRMP_ABDR, na.rm = TRUE) / sqrt(length(d_ABDRMP_ABDR)))
 )
-
-# plot 
-ABDRMP_jsd_distance <- ggplot(antibiotic_drought_mp_distances, aes(x = treatment, y = mean_dist)) +
-  geom_point(size = 3, colour = "black") +
-  geom_errorbar(
-    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
-    width = 0.2,
-    colour = "black"
-  ) +
-  labs(y = "Mean JSD Pairwise Distance") +
-  theme(axis.title.x = element_blank()) + 
-  ggtitle("Antibiotic + Drought + MP") +
-  theme(plot.title = element_text(hjust = 0.5))
   
 antibiotic_drought_mp_metabolomics_d <- ABDRMP_jsd_distance$data
-saveRDS(antibiotic_drought_mp_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_drought_mp_metabolomics_d.rds")
+saveRDS(antibiotic_drought_mp_metabolomics_d, "~/antibiotic_drought_mp_metabolomics_d.rds")
 
 
 ## MP + DR + HB ## 
@@ -907,21 +742,8 @@ drought_herbicide_mp_distances <- data.frame(
                  sd(d_DRHBMP_DRHB, na.rm = TRUE) / sqrt(length(d_DRHBMP_DRHB)))
 )
 
-# plot 
-DRHBMP_jsd_distance <- ggplot(drought_herbicide_mp_distances, aes(x = treatment, y = mean_dist)) +
-  geom_point(size = 3, colour = "black") +
-  geom_errorbar(
-    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
-    width = 0.2,
-    colour = "black"
-  ) +
-  theme(axis.title.y = element_blank()) + 
-  theme(axis.title.x = element_blank()) + 
-  ggtitle("Drought + Herbicide + MP") +
-  theme(plot.title = element_text(hjust = 0.5))
-
 drought_herbicide_mp_metabolomics_d <- DRHBMP_jsd_distance$data
-saveRDS(drought_herbicide_mp_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/drought_herbicide_mp_metabolomics_d.rds")
+saveRDS(drought_herbicide_mp_metabolomics_d, "~/drought_herbicide_mp_metabolomics_d.rds")
 
 ## AB + HB + MP ## 
 # labels 
@@ -940,21 +762,8 @@ antibiotic_herbicide_mp_distances <- data.frame(
                  sd(d_ABHBMP_ABHB, na.rm = TRUE) / sqrt(length(d_ABHBMP_ABHB)))
 )
 
-# plot 
-ABHBMP_jsd_distance <- ggplot(antibiotic_herbicide_mp_distances, aes(x = treatment, y = mean_dist)) +
-  geom_point(size = 3, colour = "black") +
-  geom_errorbar(
-    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
-    width = 0.2,
-    colour = "black"
-  ) +
-  labs(x = "Component Stress Treatments",
-    y = "Mean JSD Pairwise Distance") +
-  ggtitle("Antibiotic + Herbicide + MP") +
-  theme(plot.title = element_text(hjust = 0.5))
-
 antibiotic_herbicide_mp_metabolomics_d <- ABHBMP_jsd_distance$data
-saveRDS(antibiotic_herbicide_mp_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_herbicide_mp_metabolomics_d.rds")
+saveRDS(antibiotic_herbicide_mp_metabolomics_d, "~/antibiotic_herbicide_mp_metabolomics_d.rds")
 
 ## AB + DR + HB ## 
 # labels 
@@ -973,28 +782,8 @@ antibiotic_drought_herbicide_distances <- data.frame(
                  sd(d_ABDRHB_ABDR, na.rm = TRUE) / sqrt(length(d_ABDRHB_ABDR)))
 )
 
-# plot 
-ABDRHB_jsd_distance <- ggplot(antibiotic_drought_herbicide_distances, aes(x = treatment, y = mean_dist)) +
-  geom_point(size = 3, colour = "black") +
-  geom_errorbar(
-    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
-    width = 0.2,
-    colour = "black"
-  ) +
-  labs(x = "Component Stress Treatments") +
-  theme(axis.title.y = element_blank()) + 
-  ggtitle("Antibiotic + Drought + Herbicide") +
-  theme(plot.title = element_text(hjust = 0.5))
-
 antibiotic_drought_herbicide_metabolomics_d <- ABDRHB_jsd_distance$data
-saveRDS(antibiotic_drought_herbicide_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_drought_herbicide_metabolomics_d.rds")
-
-### arrange 3 stress plots ### 
-three_stress_jsd_plots <- ggarrange(ABDRMP_jsd_distance, DRHBMP_jsd_distance, ABHBMP_jsd_distance, ABDRHB_jsd_distance,
-          ncol = 2, nrow = 2)
-
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/three_stress_jsd_metabolomics.svg", three_stress_jsd_plots, width = 14, height = 6)
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/three_stress_jsd_metabolomics.pdf", three_stress_jsd_plots, width = 14, height = 6)
+saveRDS(antibiotic_drought_herbicide_metabolomics_d, "~/antibiotic_drought_herbicide_metabolomics_d.rds")
 
 #### 4 stress #### 
 ## AB + DR + HB + MP ## 
@@ -1016,24 +805,7 @@ antibiotic_drought_herbicide_mp_distances <- data.frame(
                  sd(d_ABDRHBMP_ABDRHB, na.rm = TRUE) / sqrt(length(d_ABDRHBMP_ABDRHB)))
 )
 
-# plot 
-all_four_jsd_distance <- ggplot(antibiotic_drought_herbicide_mp_distances, aes(x = treatment, y = mean_dist)) +
-  geom_point(size = 3, colour = "black") +
-  geom_errorbar(
-    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
-    width = 0.2,
-    colour = "black"
-  ) +
-  labs(x = "Component Stress Treatments",
-    y = "Mean JSD Pairwise Distance") + 
-    ggtitle("Antibiotic + Drought + Herbicide + MP") +
-  theme(plot.title = element_text(hjust = 0.5)) + 
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/all_four_jsd_distance_metabolomics.svg", all_four_jsd_distance, width = 8, height = 5) 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/all_four_jsd_distance_metabolomics.pdf", all_four_jsd_distance, width = 8, height = 5)
-
 allfour_metabolomics_d <- all_four_jsd_distance$data
-saveRDS(allfour_metabolomics_d, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/allfour_metabolomics_d.rds")
+saveRDS(allfour_metabolomics_d, "~/allfour_metabolomics_d.rds")
 ```
 
