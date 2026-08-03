@@ -23,7 +23,7 @@ library(tidyverse)
 
 Step 2: Define the following path variable so that it points to the extracted directory on your machine: 
 ```{r}
-path <- "~/Desktop/FDA_Lab/Experiment1/sequencing/raw_reads/"
+path <- "~/raw_reads/"
 #Check path
 list.files(path)
 path
@@ -249,7 +249,7 @@ rbind(FWD.ForwardReads = sapply(FWD.orients, primerHits, fn = fnFs.g[[2]]), FWD.
 
 ```{r}
 # cd to your FASTQ directory
-cd ~/Desktop/FDA_Lab/Experiment1/sequencing/raw_reads/
+cd ~/raw_reads/
 
 mkdir -p cutadapt_primers
 
@@ -281,8 +281,6 @@ done
 
 ```
 
-
-
 Step 6:  in R: Check that primers were removed: 
 ```{r}
 path_g.p <- file.path(path, "cutadapt_primers")   # <- where the *_cut.fastq live
@@ -300,10 +298,3 @@ rbind(FWD.ForwardReads = sapply(FWD.orients, primerHits, fn = fnFs.g.p[[1]]), FW
     primerHits, fn = fnRs.g.p[[1]]), REV.ForwardReads = sapply(REV.orients, primerHits,
     fn = fnFs.g.p[[1]]), REV.ReverseReads = sapply(REV.orients, primerHits, fn = fnRs.g.p[[1]]))
 ```
-Note that the first time I checked the presence of primers, I indicated the second file in my fnFs.g and fnRs.g list; but I'm comparing it to the first file in the fnFs.g.p/fnRs.g.p lists. That's because my first file in the .g list is the one that isn't associated with a sample, but it gets removed before the comparison. So I'm really comparing sample ID 1 in both steps. 
-it worked! yippee. But did not remove the RevComp FWD rev or RevComp REV reads... 
-
-
-
-
-
