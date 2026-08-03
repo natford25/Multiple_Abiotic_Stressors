@@ -17,9 +17,9 @@ Concurrent environmental stressors are increasingly common and interact in non-a
 * Main analysis conducted in <name of r file + link>
 
 ## Metabolomics processing and analysis 
-* Data wrangling was conducted in <name of r file + link>
+* Data wrangling was conducted in [MSE1_Exudates_f](MSE1_Exudates_f)
 * Quantification of total organic carbon in exudates performed in [MSE1_TOC](MSE1_TOC)
 
 ## Supplementary/Other information 
 * Confirmation of drought effects conducted in [MSE1_Drought](MSE1_Drought)
-* 
+  
