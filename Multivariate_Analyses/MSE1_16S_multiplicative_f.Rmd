@@ -40,7 +40,7 @@ theme_set(theme_bw())
 
 ```{r}
 # load data
-load("~/Desktop/FDA_Lab/Experiment1/manuscript/data/phyloseq_rarefied.Rdata")
+load("~/phyloseq_rarefied.Rdata")
 ntaxa(physeq_rare)
 ```
 
@@ -79,7 +79,7 @@ smd <- cbind(sample_data(physeq_mse1.filtered3), alphadiv)
 sample_data(physeq_mse1.filtered3) <- smd  # update in phyloseq object
 
 # save 
-save(physeq_mse1.filtered3, file="~/Desktop/FDA_Lab/Experiment1/manuscript/data/phyloseq_filtered_alphadiv_updated.Rdata")
+save(physeq_mse1.filtered3, file="~/phyloseq_filtered_alphadiv_updated.Rdata")
 ```
 
 ```{r}
@@ -95,25 +95,6 @@ smd$Stress_ID <- factor(smd$Stress_ID,
                                        "Antibiotic_Herbicide_MP", "Antibiotic_Drought_Herbicide", 
                                        "Antibiotic_Drought_Herbicide_MP"
                                        ))
-
-#set up boxplots comparing diversity indeces and Stress ID 
-plot.Chao1 <- ggplot(smd, aes(x = Stress_ID, y = Chao1)) + 
-  geom_jitter(color = "black", width = 0.3) +
-  geom_boxplot(alpha = 0.8) + 
-  ylab("Chao1") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
-
-plot.Shannon <- ggplot(smd, aes(x = Stress_ID, y = Shannon)) +
-  geom_jitter(color = "black", width = 0.3) +
-  geom_boxplot(alpha = 0.8) + 
-  ylab("Shannon's Diversity") + 
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
-
-plot.InvSimp <- ggplot(smd, aes(x = Stress_ID, y = InvSimpson)) +
-  geom_jitter(color = "black", width = 0.3) +
-  geom_boxplot(alpha = 0.8) + 
-  ylab("Inverse Simpson Diversity") + 
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
 
 plot.Obs.ASVs <- ggplot(smd, aes(x = Stress_ID, y = Observed, color = Stress_ID)) +
   geom_jitter(width = 0.3) +
@@ -141,11 +122,8 @@ plot.Obs.ASVs <- ggplot(smd, aes(x = Stress_ID, y = Observed, color = Stress_ID)
     )
   )
 
-#save only shannon's diversity plot 
-#ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/shannondiv.pdf", plot.Shannon, width = 8, height = 5)
-
-#save only observed ASV plot 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/obs_ASV_plot.pdf", plot.Obs.ASVs)
+#save  
+ggsave("~/obs_ASV_plot.pdf", plot.Obs.ASVs)
 ```
 
 ## Ordination 
@@ -176,7 +154,7 @@ unconstrained_ordination_jsd <- plot_ordination(physeq_mse1.filtered3, pcoa_ord_
         "Antibiotic_Drought_Herbicide_MP" = "#000000"
     )) # the clustering is not as clear compared to bray-curtis 
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/pcoa_jsd_ordination.pdf", unconstrained_ordination_jsd, width = 10, height = 8)
+ggsave("~/pcoa_jsd_ordination.pdf", unconstrained_ordination_jsd, width = 10, height = 8)
 ```
 
 # Variance partitioning 
@@ -316,7 +294,7 @@ jsd_mean_distances_se <- ggplot(res_jsd, aes(x = Treatment, y = Distance_to_Cont
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ## Add metabolomics data 
-metabolomic_jsd_data <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/metabolomic_jsd_data.rds")
+metabolomic_jsd_data <- readRDS("~/metabolomic_jsd_data.rds")
 # combine with microbiome 
 control_jsd_combined <- bind_rows(list(microbiome = res_jsd, metabolites = metabolomic_jsd_data), 
                                   .id = "data_type")
@@ -334,7 +312,7 @@ combined_control_jsd <- ggplot(control_jsd_combined, aes(x = Treatment, y = Dist
   scale_color_manual(values = c("microbiome" = "#4363d8", "metabolites" = "#e6194B")) + 
   coord_flip()
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/combined_control_jsd.pdf", combined_control_jsd, width = 10, height = 14)
+ggsave("~/combined_control_jsd.pdf", combined_control_jsd, width = 10, height = 14)
 ```
 
 
@@ -384,7 +362,7 @@ DRMP_jsd_distance <- ggplot(drought_mp_distances, aes(x = treatment, y = mean_di
   theme(plot.title = element_text(hjust = 0.5))
 
 ## Add metabolomics data 
-drought_mp_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/drought_mp_metabolomics_d.rds")
+drought_mp_metabolomics_d <- readRDS("~/drought_mp_metabolomics_d.rds")
 # combine with microbiome 
 DRMP_jsd_combined <- bind_rows(list(microbiome = drought_mp_distances, metabolites = drought_mp_metabolomics_d), 
                                   .id = "data_type")
@@ -435,7 +413,7 @@ ABMP_jsd_distance <- ggplot(antibiotic_mp_distances, aes(x = treatment, y = mean
   theme(plot.title = element_text(hjust = 0.5))
 
 ## Add metabolomics data 
-antibiotic_mp_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_mp_metabolomics_d.rds")
+antibiotic_mp_metabolomics_d <- readRDS("~/antibiotic_mp_metabolomics_d.rds")
 # combine with microbiome 
 ABMP_jsd_combined <- bind_rows(list(microbiome = antibiotic_mp_distances, metabolites = antibiotic_mp_metabolomics_d), 
                                   .id = "data_type")
@@ -485,7 +463,7 @@ HBMP_jsd_distance <- ggplot(herbicide_mp_distances, aes(x = treatment, y = mean_
   theme(plot.title = element_text(hjust = 0.5))
 
 ## Add metabolomics data 
-herbicide_mp_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/herbicide_mp_metabolomics_d.rds")
+herbicide_mp_metabolomics_d <- readRDS("~/herbicide_mp_metabolomics_d.rds")
 # combine with microbiome 
 HBMP_jsd_combined <- bind_rows(list(microbiome = herbicide_mp_distances, metabolites = herbicide_mp_metabolomics_d), 
                                   .id = "data_type")
@@ -535,7 +513,7 @@ ABHB_jsd_distance <- ggplot(antibiotic_herbicide_distances, aes(x = treatment, y
   theme(plot.title = element_text(hjust = 0.5))
 
 ## Add metabolomics data 
-antibiotic_herbicide_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_herbicide_metabolomics_d.rds")
+antibiotic_herbicide_metabolomics_d <- readRDS("~/antibiotic_herbicide_metabolomics_d.rds")
 # combine with microbiome 
 ABHB_jsd_combined <- bind_rows(list(microbiome = antibiotic_herbicide_distances, metabolites = antibiotic_herbicide_metabolomics_d), 
                                   .id = "data_type")
@@ -585,7 +563,7 @@ DRHB_jsd_distance <- ggplot(drought_herbicide_distances, aes(x = treatment, y = 
   theme(plot.title = element_text(hjust = 0.5))
 
 ## Add metabolomics data 
-drought_herbicide_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/drought_herbicide_metabolomics_d.rds")
+drought_herbicide_metabolomics_d <- readRDS("~/drought_herbicide_metabolomics_d.rds")
 # combine with microbiome 
 DRHB_jsd_combined <- bind_rows(list(microbiome = drought_herbicide_distances, metabolites = drought_herbicide_metabolomics_d), 
                                   .id = "data_type")
@@ -634,7 +612,7 @@ ABDR_jsd_distance <- ggplot(antibiotic_drought_distances, aes(x = treatment, y =
   theme(plot.title = element_text(hjust = 0.5))
 
 ## Add metabolomics data 
-antibiotic_drought_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_drought_metabolomics_d.rds")
+antibiotic_drought_metabolomics_d <- readRDS("~/antibiotic_drought_metabolomics_d.rds")
 # combine with microbiome 
 ABDR_jsd_combined <- bind_rows(list(microbiome = antibiotic_drought_distances, metabolites = antibiotic_drought_metabolomics_d), 
                                   .id = "data_type")
@@ -657,13 +635,11 @@ combined_ABDR_jsd <- ggplot(ABDR_jsd_combined, aes(x = treatment, y = mean_dist,
 two_stress_jsd_plots <- ggarrange(DRMP_jsd_distance, ABMP_jsd_distance, HBMP_jsd_distance, ABHB_jsd_distance, DRHB_jsd_distance, ABDR_jsd_distance,
           ncol = 3, nrow = 2)
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/plots/two_stress_jsd.svg", two_stress_jsd_plots,width = 14, height = 6)
-
 two_stress_combined_jsd <- ggarrange(combined_DRMP_jsd, combined_ABMP_jsd, combined_HBMP_jsd,
                                      combined_ABHB_jsd, combined_DRHB_jsd, combined_ABDR_jsd,
-                                     ncol = 3, nrow = 2, common.legend = TRUE) # don't love how this looks because it's hard to see differences in microbiome data (distances in metabolomics are so much greater)
+                                     ncol = 3, nrow = 2, common.legend = TRUE)
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/two_stress_combined_jsd.pdf", two_stress_combined_jsd, width = 12)
+ggsave("~/two_stress_combined_jsd.pdf", two_stress_combined_jsd, width = 12)
 
 ### 3-way stresses ### 
 ## DR + AB + MP ## 
@@ -697,7 +673,7 @@ ABDRMP_jsd_distance <- ggplot(antibiotic_drought_mp_distances, aes(x = treatment
   theme(plot.title = element_text(hjust = 0.5))
   
 ## Add metabolomics data 
-antibiotic_drought_mp_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_drought_mp_metabolomics_d.rds")
+antibiotic_drought_mp_metabolomics_d <- readRDS("~/antibiotic_drought_mp_metabolomics_d.rds")
 # combine with microbiome 
 ABDRMP_jsd_combined <- bind_rows(list(microbiome = antibiotic_drought_mp_distances, metabolites = antibiotic_drought_mp_metabolomics_d), 
                                  .id = "data_type")
@@ -747,7 +723,7 @@ DRHBMP_jsd_distance <- ggplot(drought_herbicide_mp_distances, aes(x = treatment,
   theme(plot.title = element_text(hjust = 0.5))
 
 ## Add metabolomics data 
-drought_herbicide_mp_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/drought_herbicide_mp_metabolomics_d.rds")
+drought_herbicide_mp_metabolomics_d <- readRDS("~/drought_herbicide_mp_metabolomics_d.rds")
 # combine with microbiome 
 DRHBMP_jsd_combined <- bind_rows(list(microbiome = drought_herbicide_mp_distances, metabolites = drought_herbicide_mp_metabolomics_d), 
                                  .id = "data_type")
@@ -797,7 +773,7 @@ ABHBMP_jsd_distance <- ggplot(antibiotic_herbicide_mp_distances, aes(x = treatme
   theme(plot.title = element_text(hjust = 0.5))
 
 ## Add metabolomics data 
-antibiotic_herbicide_mp_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_herbicide_mp_metabolomics_d.rds")
+antibiotic_herbicide_mp_metabolomics_d <- readRDS("~/antibiotic_herbicide_mp_metabolomics_d.rds")
 # combine with microbiome 
 ABHBMP_jsd_combined <- bind_rows(list(microbiome = antibiotic_herbicide_mp_distances, metabolites = antibiotic_herbicide_mp_metabolomics_d), 
                                  .id = "data_type")
@@ -847,7 +823,7 @@ ABDRHB_jsd_distance <- ggplot(antibiotic_drought_herbicide_distances, aes(x = tr
   theme(plot.title = element_text(hjust = 0.5))
 
 ## Add metabolomics data 
-antibiotic_drought_herbicide_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_drought_herbicide_metabolomics_d.rds")
+antibiotic_drought_herbicide_metabolomics_d <- readRDS("~/antibiotic_drought_herbicide_metabolomics_d.rds")
 # combine with microbiome 
 ABDRHB_jsd_combined <- bind_rows(list(microbiome = antibiotic_drought_herbicide_distances, metabolites = antibiotic_drought_herbicide_metabolomics_d), 
                                  .id = "data_type")
@@ -870,12 +846,10 @@ combined_ABDRHB_jsd <- ggplot(ABDRHB_jsd_combined, aes(x = treatment, y = mean_d
 three_stress_jsd_plots <- ggarrange(ABDRMP_jsd_distance, DRHBMP_jsd_distance, ABHBMP_jsd_distance, ABDRHB_jsd_distance,
           ncol = 2, nrow = 2)
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/plots/three_stress_jsd.svg", three_stress_jsd_plots, width = 14, height = 6)
-
 three_stress_combined_jsd <- ggarrange(combined_ABDRMP_jsd, combined_DRHBMP_jsd, combined_ABHBMP_jsd, combined_ABDRHB_jsd, 
                                        ncol = 2, nrow = 2, common.legend = TRUE)
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/three_stress_combined_jsd.pdf", three_stress_combined_jsd, width = 10)
+ggsave("~/three_stress_combined_jsd.pdf", three_stress_combined_jsd, width = 10)
 
 #### 4 stress #### 
 ## AB + DR + HB + MP ## 
@@ -912,7 +886,7 @@ all_four_jsd_distance <- ggplot(antibiotic_drought_herbicide_mp_distances, aes(x
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ## Add metabolomics data 
-allfour_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/allfour_metabolomics_d.rds")
+allfour_metabolomics_d <- readRDS("~/allfour_metabolomics_d.rds")
 # combine with microbiome 
 allfour_jsd_combined <- bind_rows(list(microbiome = antibiotic_drought_herbicide_mp_distances, metabolites = allfour_metabolomics_d), 
                                  .id = "data_type")
@@ -933,7 +907,7 @@ combined_allfour_jsd <- ggplot(allfour_jsd_combined, aes(x = treatment, y = mean
   coord_flip() + 
   theme(legend.position = "none")
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/combined_allfour_jsd.pdf", combined_allfour_jsd, width = 6, height = 4)
+ggsave("~/combined_allfour_jsd.pdf", combined_allfour_jsd, width = 6, height = 4)
 ```
 
 # variance partitioning together 
@@ -984,7 +958,7 @@ variance_part_combined <- ggplot(combined_var_part, aes(x = R2_pct, y = Variable
   labs(x = "Variance Explained (%)") + 
   scale_fill_manual(values = c("Microbiome" = "#4363d8", "Exudates" = "#e6194B"))
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/exudates_variance_part_combined.pdf", variance_part_combined, height = 5)
+ggsave("~/exudates_variance_part_combined.pdf", variance_part_combined, height = 5)
 ```
 
 # bipartite networks - microbiome & exudate integration 
@@ -1197,8 +1171,8 @@ names(network_results_045) <- names(network_samples)
 all_edges_045 <- bind_rows(lapply(network_results_045, function(x) if(!is.null(x)) x$edges else NULL))
 all_nodes_045 <- bind_rows(lapply(network_results_045, function(x) if(!is.null(x)) x$nodes else NULL))
 
-write.csv(all_edges_045, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/network_edges_rho045.csv", row.names = FALSE)
-write.csv(all_nodes_045, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/network_nodes_rho045.csv", row.names = FALSE)
+write.csv(all_edges_045, "~/network_edges_rho045.csv", row.names = FALSE)
+write.csv(all_nodes_045, "~/network_nodes_rho045.csv", row.names = FALSE)
 
 ### 6. Threshold sensitivity analysis (0.35, 0.40, 0.45, 0.50) ####
 
@@ -1240,7 +1214,7 @@ sensitivity_summary <- map_dfr(names(sensitivity_results), function(thresh_name)
   })
 })
 
-write.csv(sensitivity_summary, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/network_threshold_sensitivity.csv", row.names = FALSE)
+write.csv(sensitivity_summary, "~/network_threshold_sensitivity.csv", row.names = FALSE)
 
 ### 7. Global network with bootstrap (for stable edges) ####
 
@@ -1313,8 +1287,8 @@ global_boot <- bootstrap_global_network(
   rho_cutoff = 0.35, q_cutoff = 0.05, n_boot = 100, boot_cutoff = 0.75
 )
 
-write.csv(global_boot$stable_edges, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/global_stable_edges.csv", row.names = FALSE)
-write.csv(global_boot$all_edges, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/global_all_edges.csv", row.names = FALSE)
+write.csv(global_boot$stable_edges, "~/global_stable_edges.csv", row.names = FALSE)
+write.csv(global_boot$all_edges, "~/global_all_edges.csv", row.names = FALSE)
 
 ### 8. Edge preservation analysis ####
 
@@ -1341,7 +1315,7 @@ if (!is.null(global_boot) && nrow(global_boot$stable_edges) > 0) {
     rownames_to_column("edge") %>%
     separate(edge, into = c("ASV", "metabolite"), sep = "~~~")
   
-  write.csv(preservation_df, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/edge_preservation_across_networks.csv", row.names = FALSE)
+  write.csv(preservation_df, "~/edge_preservation_across_networks.csv", row.names = FALSE)
 }
 
 ### 9. Plot one network example ####
@@ -1381,7 +1355,7 @@ if (!is.null(global_boot) && nrow(global_boot$stable_edges) > 0) {
     "Global Stable Network (bootstrap ≥ 0.75)"
   )
   
-  ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/network_global_stable.pdf",
+  ggsave("~/network_global_stable.pdf",
          p_global, width = 12, height = 10)
 }
 
@@ -1390,7 +1364,7 @@ for (net_name in names(network_results_045)) {
   net <- network_results_045[[net_name]]
   if (!is.null(net) && nrow(net$edges) > 0) {
     p <- plot_bipartite_network(net$edges, net$nodes, net_name)
-    ggsave(paste0("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/network_", net_name, ".pdf"),
+    ggsave(paste0("~/network_", net_name, ".pdf"),
            p, width = 10, height = 8)
   }
 }
@@ -1513,7 +1487,7 @@ if (!is.null(global_boot) && nrow(global_boot$stable_edges) > 0) {
     label_top_n = 30
   )
   
-  ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/network_global_stable.pdf",
+  ggsave("~/network_global_stable.pdf",
          p_global, width = 12, height = 10)
 }
 
@@ -1530,12 +1504,11 @@ for (net_name in names(network_results_045)) {
       title_text = net_name, 
       label_top_n = 20
     )
-    ggsave(paste0("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/network_", net_name, ".pdf"),
+    ggsave(paste0("~/network_", net_name, ".pdf"),
            p, width = 10, height = 8)
   }
 }
 ```
-
 
 ```{r}
 ### Network summary statistics ####
@@ -1582,7 +1555,7 @@ network_stats <- map_dfr(names(network_results_045), function(nm) {
   )
 })
 
-write.csv(network_stats, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/network_summary_stats.csv", row.names = FALSE)
+write.csv(network_stats, "~/network_summary_stats.csv", row.names = FALSE)
 
 
 # Separate global from stress-specific
@@ -1613,96 +1586,10 @@ p_edge_count <- network_stats %>%
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/network_edge_count_comparison.pdf",
+ggsave("~/network_edge_count_comparison.pdf",
        p_edge_count, width = 8, height = 5)
-# note that these edges are only between ASVs and metabolites (that's what a bipartite network is; every edge connects ASV to metabolite)
+# note that these edges are only between ASVs and metabolites
 
-# Node comparision 
-# Reshape from wide to long
-# Correct reshaping - only pivot the specific node type columns
-network_stats_long <- network_stats %>%
-  pivot_longer(
-    cols = c(n_ASVs, n_metabolites),  # Only these columns
-    names_to = "node_type",
-    values_to = "count"
-  )
-
-library(ggpattern)
-
-network_stats_long %>% 
-  filter(network != "global") %>% 
-  ggplot(aes(x = stressor, y = count, fill = presence, pattern = node_type)) + 
-  geom_col_pattern(
-    position = position_dodge2(preserve = "single"), 
-    color = "black", 
-    pattern_fill = "black", 
-    pattern_angle = 45, 
-    pattern_density = 0.1, 
-    pattern_spacing = 0.025, 
-    pattern_key_scale_factor = 0.6,
-  ) +
-  scale_fill_manual(values = c(Present = "#e6194B", Absent = "#4363d8")) +
-  scale_pattern_manual(
-    values = c(n_ASVs = "stripe", n_metabolites = "none"),
-    labels = c("ASVs", "Metabolites")
-  )
-
-p_nodes <- network_stats_long %>% 
-  filter(network != "global") %>% 
-  ggplot(aes(x = interaction(stressor, presence), y = count, 
-             fill = presence, 
-             pattern = node_type)) + 
-  geom_col_pattern(
-    position = "stack",
-    color = "black", 
-    pattern_fill = "black", 
-    pattern_angle = 45, 
-    pattern_density = 0.1, 
-    pattern_spacing = 0.025,
-    pattern_key_scale_factor = 0.6,
-    width = 0.7
-  ) +
-  scale_fill_manual(values = c(Present = "#e6194B", Absent = "#4363d8")) +
-  scale_pattern_manual(
-    values = c(n_ASVs = "stripe", n_metabolites = "none"),
-    labels = c("ASVs", "Metabolites")
-  ) +
-  scale_x_discrete(labels = function(x) gsub("\\..*", "", x)) +  # Clean x-axis labels
-  labs(x = "Stressor Condition", y = "Number of Nodes", 
-       pattern = "Node Type") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/network_node_comparison.pdf", p_nodes)
-
-
-
-# Density comparison
-p_density <- network_stats %>%
-  filter(network != "global") %>%
-  ggplot(aes(x = stressor, y = density, fill = presence)) +
-  geom_col(position = "dodge") +
-  scale_fill_manual(values = c(Present = "#e6194B", Absent = "#4363d8")) +
-  labs(x = "Stressor", y = "Network density", fill = "Stressor status") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-#ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/network_density_comparison.pdf",
-#       p_density, width = 8, height = 5)
-
-# Correlation strength comparison
-p_strength <- network_stats %>%
-  filter(network != "global") %>%
-  ggplot(aes(x = stressor, y = mean_abs_rho, fill = presence)) +
-  geom_col(position = "dodge") +
-  scale_fill_manual(values = c(Present = "#e6194B", Absent = "#4363d8")) +
-  labs(x = "Stressor", y = "Mean |ρ|", fill = "Stressor status",
-       title = "Average edge strength") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-#ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/network_edge_strength_comparison.pdf",
-#       p_strength, width = 8, height = 5)
 
 ### Edge overlap analysis #### 
 # (compare which edges are shared between networks) # 
@@ -1758,7 +1645,7 @@ presence_absence_overlap <- map_dfr(stressors, function(stress) {
 })
 
 write.csv(presence_absence_overlap, 
-          "~/Desktop/FDA_Lab/Experiment1/manuscript/data/network_presence_absence_overlap.csv",
+          "~/network_presence_absence_overlap.csv",
           row.names = FALSE)
 
 # Plot Jaccard similarity
@@ -1768,6 +1655,6 @@ p_jaccard <- ggplot(presence_absence_overlap, aes(x = stressor, y = jaccard)) +
        title = "Edge overlap: present vs. absent networks") +
   theme_bw()
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/network_jaccard_overlap.pdf",
+ggsave("~/network_jaccard_overlap.pdf",
        p_jaccard, width = 6, height = 4)
 ```
