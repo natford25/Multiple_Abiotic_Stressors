@@ -22,8 +22,8 @@ library(tidyr)
 library(purrr)
 library(stringr)
 library(emmeans)
-library(multcomp) #needed for mean diff letters  (need for cld)
-library(multcompView) #needed for mean diff letter
+library(multcomp) 
+library(multcompView) 
 library(lme4)
 library(lmerTest)
 library(nlme)
@@ -33,7 +33,7 @@ theme_set(theme_bw())
 
 ```{r}
 # Load and prep data 
-x <- read_xlsx("~/Desktop/FDA_Lab/Experiment1/data/FINAL_METADATA_SHEET.xlsx")
+x <- read_xlsx("~/MSE1_metadata.xlsx")
 
 # remove sample IDs 59 and 114 because they did not survive the experiment and there is no data associated with them 
 y <- x %>% filter(ID !=59)
@@ -63,63 +63,11 @@ mse1$Stress_ID <- factor(mse1$Stress_ID,
 ```
 
 ```{r}
-# simple scatter and boxplot showing RAW Non-Purgable Organic Carbon (NPOC)
-
-ggplot(mse1, aes(x = Stress_ID, y = NPOC, color = Num_Stress)) + 
-  geom_boxplot() + 
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
-# have some crazy outliers 
-
-toc_raw_all_points <- ggplot(mse1, aes(x = Stress_ID, y = NPOC, color = Num_Stress)) + 
-  geom_point() + 
-  geom_jitter() + 
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
-
-ggsave("~/Desktop/FDA_Lab/Experiment1/plots/toc_raw_all_points.svg", toc_raw_all_points)
-
-# ordering by raw NPOC to look at what the outliers are 
-mse1 %>%
-  arrange(NPOC) %>%           # sort by NPOC
-  dplyr::select(Stress_ID, NPOC) 
-
-# how do I decide what outliers to remove? 
-# lexi says only remove outliers when you have a clear and defensible reason
-## can transform data to stabilize variance and reduce the impact of high values (this is essentially what I'm doing with the standardization later, so I won't remove any outliers here)
-
-toc_raw_no_outliers <- ggplot(mse1, aes(x = Stress_ID, y = NPOC, color = Num_Stress)) + 
-  geom_point() + 
-  geom_jitter() + 
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
-  ylim(-1, 10) #here, I'm just making a plot that is zoomed in on the y-axis (not removing outliers from dataset, just zooming in on the bulk of the data points to try to see if there are any patterns at this level)
-
-ggsave("~/Desktop/FDA_Lab/Experiment1/plots/toc_raw_no_outliers.svg", toc_raw_no_outliers)
-
-
-# should I change all the negative NPOC values to 0? How can I have a negative NPOC? 
-## biologically, negative NPOC is not meaningful; it almost always reflects instrument/blank noice or a calculation artifact 
-## shimadzu TOC analyzers often compute TOC as a difference (TC - IC = TOC), and when inorganic carbon is high or the blank/baseline is noisy, the subtraction can yield negative TOC/NPOC values, even though true carbon cannot be negative
-## manuals explicitly note that low-level TOC results can be slightly positive or negative around zero, and to treat those small negatives as numerical results arising from noise
-## for the analysis, you should not interpret negative NPOC as real; they are effectively "at or below detection". You can treat them as zero when they are small in magnitude and near your blank level, while documenting that these are below-detection measurements
-
-# change negative values to 0 
+# change negative values to 0 (biologically, negative NPOC is not meaningful; it almost always reflects instrument/blank noise or a calculation artifact)
 mse1 <- mse1 %>% 
   mutate(NPOC = if_else(NPOC < 0, 0, NPOC))
 
-toc_raw_no_outliers_no_neg <- ggplot(mse1, aes(x = Stress_ID, y = NPOC, color = Num_Stress)) + 
-  geom_point() + 
-  geom_jitter() + 
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
-  ylim(-1, 10) 
-
-ggsave("~/Desktop/FDA_Lab/Experiment1/plots/toc_raw_no_outliers_no_neg.svg", toc_raw_no_outliers_no_neg)
-```
-
-```{r}
 # need to standardize NPOC by root biomass (larger root systems = more C)
-# to standardize by root biomass, I need to convert NPOC to total mass (mg of C) first (right now, the values are a concentration - mg/L). To do this, I will multiply by 100 mL (0.1 L), since that is the volume I collected the exudates in orignally (although they are being measured from a smaller aliquot of that initial volume). 
-# Then, I can calculate NPOC per mg of root: Total NPOC (mg) / root biomass (mg)
-
-
 # creating new columns for total NPOC and NPOC per mg of root 
 mse1 <- mse1 %>% 
   mutate(
@@ -132,29 +80,16 @@ npoc_per_root_all <- ggplot(mse1, aes(x = Stress_ID, y = NPOC_per_mg_root, color
   geom_boxplot() + 
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/plots/npoc_per_root_all.svg", npoc_per_root_all)
-
-# ordering by NPOC per mg of root to look at what the outliers are 
-mse1 %>%
-  arrange(NPOC_per_mg_root) %>%           # sort by NPOC
-  dplyr::select(Stress_ID, NPOC_per_mg_root) 
-
-npoc_per_root_no_outliers <- ggplot(mse1, aes(x = Stress_ID, y = NPOC_per_mg_root, color = Num_Stress)) + 
-  geom_point() + 
-  geom_jitter() + 
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) + 
-  ylim(-0.001, 0.035) # again, not actually removing any outliers from the dataset, just zooming in on the y-axis to see if patterns exist that I couldn't see in the previous graph 
-
-ggsave("~/Desktop/FDA_Lab/Experiment1/plots/npoc_per_root_no_outliers.svg", npoc_per_root_no_outliers)
+ggsave("~/npoc_per_root_all.svg", npoc_per_root_all)
 ```
 
 ```{r}
-# ANOVA / stats --> I'm definitely doing this wrong lol 
+# stats
 toc_model1 <- lm(NPOC_per_mg_root ~ Stress_ID, data = mse1)
 summary(toc_model1)
 
 anova(toc_model1)
-# treatment not significant :(
+# treatment not significant
 
 cld(toc_model1,  adjust = "sidak", Letters = letters) 
 ```
