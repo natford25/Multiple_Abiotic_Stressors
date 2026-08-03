@@ -14,7 +14,7 @@ Concurrent environmental stressors are increasingly common and interact in non-a
 * Bacterial sequences were trimmed in [MSE1_dada2_cutadapt_f](MSE1_dada2_cutadapt_f)
 * Bacterial sequences were processed and filtered in [MSE1_dada2_processing_f](MSE1_dada2_processing_f)
 * Taxonomy was assigned to bacterial sequences and rarefaction was performed in [MSE1_16S_Processing_f](MSE1_16S_Processing_f)
-* Main analysis conducted in <name of r file + link>
+* Main analysis conducted in [MSE1_16S_Multiplicative_f](MSE1_16S_Multiplicative_f)
 
 ## Metabolomics processing and analysis 
 * Data wrangling was conducted in [MSE1_Exudates_f](MSE1_Exudates_f)
