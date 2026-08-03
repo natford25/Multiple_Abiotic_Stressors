@@ -1,0 +1,2269 @@
+---
+title: "MSE1_Univariate_Multiplicative_v2"
+output: html_document
+date: "2026-05-15"
+---
+---
+title: "MSE1_Univariate_Multiplicative"
+author: "Natalie Ford"
+date: "`r Sys.Date()`"
+output: html_document
+---
+Final R Markdown file for the biomass and root architecture multivariate analysis for MSE1 publication
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE, 
+  warning = FALSE, 
+  message = FALSE)
+```
+
+```{r}
+# Load packages & set theme 
+library(dplyr); packageVersion("dplyr") #1.2.0 
+library(effsize); packageVersion("effsize") # 0.8.1
+library(ggplot2)
+library(ggpattern)
+library(readxl)
+library(tidyr)
+library(purrr)
+library(stringr)
+library(ggpubr)
+library(forcats)
+
+theme_set(theme_bw())
+```
+
+```{r}
+# Load and prep data 
+x <- read_xlsx("~/Desktop/FDA_Lab/Experiment1/manuscript/data/FINAL_METADATA_SHEET.xlsx")
+
+# remove sample IDs 59 and 114 because they did not survive the experiment and there is no data associated with them 
+y <- x %>% filter(ID !=59)
+mse1 <- y %>% filter(ID !=114)
+
+# remove sample IDs 71 & 66 (outliers in root architecture)
+mse1 <- mse1 %>% filter(ID!=71)
+mse1 <- mse1 %>% filter(ID!=66)
+
+# remove sample IDs 47 & 164 (outliers in microbiome data)
+mse1 <- mse1 %>% filter(ID!=47)
+mse1 <- mse1 %>% filter(ID!=164)
+
+# remove samples that have no exudate data 
+mse1 <- mse1 %>% filter(ID!=67)
+mse1 <- mse1 %>% filter(ID!=80)
+mse1 <- mse1 %>% filter(ID!=125)
+mse1 <- mse1 %>% filter(ID!=128)
+
+# make sample ID, number of stressors, and stress ID factors 
+mse1$ID <- as.factor(mse1$ID)
+mse1$Num_Stress <- as.factor(mse1$Num_Stress)
+
+#change the order of the factor levels explicitly for plots 
+mse1$Stress_ID <- factor(mse1$Stress_ID, 
+                            levels = c("Control", "MP", "Drought", "Herbicide", "Antibiotic",
+                                       "Drought_MP", "Herbicide_MP", 
+                                       "Antibiotic_MP", "Drought_Herbicide",
+                                       "Antibiotic_Drought","Antibiotic_Herbicide", 
+                                       "Drought_Herbicide_MP", "Antibiotic_Drought_MP", 
+                                       "Antibiotic_Herbicide_MP", "Antibiotic_Drought_Herbicide", 
+                                       "Antibiotic_Drought_Herbicide_MP"))
+```
+
+# Biomass
+## Shoot Biomass ##
+#### Calculating the multiplicative null model and effect sizes 
+```{r}
+analyze_all_combos <- function(mse1) {
+  
+  # extract all treatment summaries
+  treatment_summaries <- mse1 %>% 
+    group_by(Stress_ID) %>% 
+    summarize( 
+      mean_sbiomass = mean(Shoot_Biomass, na.rm = TRUE), 
+      sd_sbiomass = sd(Shoot_Biomass, na.rm = TRUE), 
+      n = n(), 
+      .groups = "drop")
+  # define all combinations to test 
+  combinations <- list(
+    #pairwise 
+    list(singles = c("MP", "Drought"), combo = "Drought_MP"), 
+    list(singles = c("MP", "Herbicide"), combo = "Herbicide_MP"), 
+    list(singles = c("MP", "Antibiotic"), combo = "Antibiotic_MP"), 
+    list(singles = c("Drought", "Herbicide"), combo = "Drought_Herbicide"),
+    list(singles = c("Drought", "Antibiotic"), combo = "Antibiotic_Drought"),
+    list(singles = c("Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide"),
+    #three-way 
+    list(singles = c("MP", "Drought", "Herbicide"), combo = "Drought_Herbicide_MP"), 
+    list(singles = c("MP", "Drought", "Antibiotic"), combo = "Antibiotic_Drought_MP"), 
+    list(singles = c("MP", "Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide_MP"), 
+    list(singles = c("Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide"),
+    #four-way 
+    list(singles = c("MP", "Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide_MP")
+  )
+  calculate_effect_size <- function(combo_info, summaries) {
+    control <- summaries %>% filter(Stress_ID == "Control")
+    combo_data <- summaries %>% filter(Stress_ID == combo_info$combo)
+    
+    if(nrow(control) == 0 | nrow(combo_data) == 0) return(NULL)
+    
+    # get single stressor data 
+    single_data <- map_dfr(combo_info$singles, ~{
+      summaries %>% filter(Stress_ID == .x)
+    })
+    
+    if(nrow(single_data) == 0) return(NULL)
+    
+    # multiplicative expectation 
+    single_means <- single_data$mean_sbiomass
+    Xc <-  control$mean_sbiomass
+    X_obs <- combo_data$mean_sbiomass
+    
+    X_exp <- prod(single_means) / Xc^(length(single_means) -1)
+    
+    # simple effect size 
+    ES <- log(X_obs) - log(X_exp)
+    
+    # VARIANCE using delta method (all treatments contribute)
+  k <- length(single_means)  # number of single stressors
+  
+  var_ES <- (
+    combo_data$sd_sbiomass^2 / (combo_data$n * X_obs^2) +           # Observed combo
+    sum(single_data$sd_sbiomass^2 / (single_data$n * single_data$mean_sbiomass^2)) +  # Singles
+    (k - 1) * (control$sd_sbiomass^2 / (control$n * Xc^2))          # Control (raised to k-1)
+  )
+  
+  SE <- sqrt(var_ES)
+  CI_lower <- ES - 1.96 * SE
+  CI_upper <- ES + 1.96 * SE
+  
+  # Classification
+  classification <- case_when(
+    CI_lower > 0 ~ "Synergistic",
+    CI_upper < 0 ~ "Antagonistic",
+    CI_lower <= 0 & CI_upper >= 0 ~ "Null",
+    TRUE ~ "Reversal"
+  )
+  
+    data.frame(
+      combination = combo_info$combo,
+      singles_used = paste(combo_info$singles, collapse = "_"), 
+      observed = X_obs, 
+      expected = X_exp, 
+      effect_size = ES, 
+      SE = SE, 
+      CI_lower = CI_lower, 
+      CI_upper = CI_upper,
+      classification = classification,
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # apply to all combos 
+  results <- map_dfr(combinations, ~calculate_effect_size(.x, treatment_summaries))
+  return(results)
+} 
+
+# run it 
+results <- analyze_all_combos(mse1)
+print(results)
+```
+
+#### Plotting the observed effect sizes for each stress combination treatment 
+```{r}
+plot_data <- results %>%
+  mutate(n_stressors = str_count(singles_used, "_") + 2)
+
+shoot_bio_multi_effects <- ggplot(plot_data, aes(x = reorder(combination, n_stressors), y = effect_size, color = classification)) +
+  geom_hline(yintercept = 0, color = "black", size = 1, linetype = "dashed") +
+  geom_point(size = 3, alpha = 0.9) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.2, alpha = 0.9) +
+  scale_color_manual(values = c("Antagonistic" = "#4363d8", "Synergistic" = "#e6194B", 
+                               "Null" = "gray50")) +
+  labs(x = "Stress Treatment", y = "Effect Size (95% CI)",
+       title = "Shoot Biomass",
+       color = "Interaction Type")
+
+#ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/shoot_bio_multiplicative_effect_sizes.svg", shoot_bio_multi_effects)
+```
+
+#### Plotting raw data 
+```{r}
+# remove NAs
+mse1_clean <- mse1 %>% drop_na(Stress_ID)
+
+# figure out what the mean of the control is to add the horizontal dotted line 
+tapply(mse1_clean$Shoot_Biomass, mse1_clean$Stress_ID, summary)
+#median shoot biomass for control = 179.3
+#mean shoot biomass for control = 178.6
+
+# plot
+shoot_biomass_boxplot <- ggplot(mse1_clean, aes(x = Stress_ID, y = Shoot_Biomass, color = Stress_ID)) + 
+  geom_boxplot(outlier.alpha = 0.4) + 
+  geom_point(size = 2, alpha = 0.4) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_hline(yintercept=179.3, linetype = "dotted") + 
+    scale_color_manual(
+    values = c(
+        "Control" = "#e6194B",
+        "MP" = "#3cb44b",
+        "Drought" = "#ffe119",
+        "Herbicide" = "#4363d8",
+        "Antibiotic" = "#f58231",
+        "Drought_MP" = "#42d4f4",
+        "Antibiotic_MP" = "#f032e6",
+        "Herbicide_MP" = "#469990",
+        "Antibiotic_Herbicide" = "#9A6324",
+        "Drought_Herbicide" = "#800000",
+        "Antibiotic_Drought" = "#911eb4",
+        "Antibiotic_Drought_Herbicide" = "#bfef45", 
+        "Antibiotic_Drought_MP" = "#808000",
+        "Antibiotic_Herbicide_MP" = "#000075",
+        "Drought_Herbicide_MP" = "#a9a9a9", 
+        "Antibiotic_Drought_Herbicide_MP" = "#000000"
+    )) + 
+  labs(y = "Shoot Biomass", x = "Treatment") + 
+  theme(legend.position = "none")
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/shoot_biomass_boxplot.png", shoot_biomass_boxplot)
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/shoot_biomass_boxplot.pdf", shoot_biomass_boxplot)
+```
+## Root Biomass ##
+#### Calculating the multiplicative null model estimates and effect sizes
+```{r}
+analyze_all_combos_rbiomass <- function(mse1) {
+  
+  # extract all treatment summaries
+  treatment_summaries <- mse1 %>% 
+    group_by(Stress_ID) %>% 
+    summarize( 
+      mean_rbiomass = mean(Root_Biomass, na.rm = TRUE), 
+      sd_rbiomass = sd(Root_Biomass, na.rm = TRUE), 
+      n = n(), 
+      .groups = "drop")
+  # define all combinations to test 
+  combinations <- list(
+    #pairwise 
+    list(singles = c("MP", "Drought"), combo = "Drought_MP"), 
+    list(singles = c("MP", "Herbicide"), combo = "Herbicide_MP"), 
+    list(singles = c("MP", "Antibiotic"), combo = "Antibiotic_MP"), 
+    list(singles = c("Drought", "Herbicide"), combo = "Drought_Herbicide"),
+    list(singles = c("Drought", "Antibiotic"), combo = "Antibiotic_Drought"),
+    list(singles = c("Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide"),
+    #three-way 
+    list(singles = c("MP", "Drought", "Herbicide"), combo = "Drought_Herbicide_MP"), 
+    list(singles = c("MP", "Drought", "Antibiotic"), combo = "Antibiotic_Drought_MP"), 
+    list(singles = c("MP", "Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide_MP"), 
+    list(singles = c("Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide"),
+    #four-way 
+    list(singles = c("MP", "Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide_MP")
+  )
+  calculate_effect_size_rbiomass <- function(combo_info, summaries) {
+    control <- summaries %>% filter(Stress_ID == "Control")
+    combo_data_rbiomass <- summaries %>% filter(Stress_ID == combo_info$combo)
+    
+    if(nrow(control) == 0 | nrow(combo_data_rbiomass) == 0) return(NULL)
+    
+    # get single stressor data 
+    single_data <- map_dfr(combo_info$singles, ~{
+      summaries %>% filter(Stress_ID == .x)
+    })
+    
+    if(nrow(single_data) == 0) return(NULL)
+    
+    # multiplicative expectation 
+    single_means <- single_data$mean_rbiomass
+    Xc <-  control$mean_rbiomass
+    X_obs <- combo_data_rbiomass$mean_rbiomass
+    
+    X_exp <- prod(single_means) / Xc^(length(single_means) -1)
+    
+    # simple effect size 
+    ES <- log(X_obs) - log(X_exp)
+    
+    # VARIANCE using delta method (all treatments contribute)
+  k <- length(single_means)  # number of single stressors
+  
+  var_ES <- (
+    combo_data_rbiomass$sd_rbiomass^2 / (combo_data_rbiomass$n * X_obs^2) +           # Observed combo
+    sum(single_data$sd_rbiomass^2 / (single_data$n * single_data$mean_rbiomass^2)) +  # Singles
+    (k - 1) * (control$sd_rbiomass^2 / (control$n * Xc^2))          # Control (raised to k-1)
+  )
+  
+  SE <- sqrt(var_ES)
+  CI_lower <- ES - 1.96 * SE
+  CI_upper <- ES + 1.96 * SE
+  
+  # Classification
+  classification <- case_when(
+    CI_lower > 0 ~ "Synergistic",
+    CI_upper < 0 ~ "Antagonistic",
+    CI_lower <= 0 & CI_upper >= 0 ~ "Null",
+    TRUE ~ "Reversal"
+  )
+  
+    data.frame(
+      combination = combo_info$combo,
+      singles_used = paste(combo_info$singles, collapse = "_"), 
+      observed = X_obs, 
+      expected = X_exp, 
+      effect_size = ES, 
+      SE = SE, 
+      CI_lower = CI_lower, 
+      CI_upper = CI_upper,
+      classification = classification,
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # apply to all combos 
+  results_rbiomass <- map_dfr(combinations, ~calculate_effect_size_rbiomass(.x, treatment_summaries))
+  return(results_rbiomass)
+} 
+
+# run it 
+results_rbiomass <- analyze_all_combos_rbiomass(mse1)
+print(results_rbiomass)
+```
+
+#### Plotting effect sizes (multiplicative model)
+```{r}
+plot_data_rbiomass <- results_rbiomass %>%
+  mutate(n_stressors = str_count(singles_used, "_") + 2)
+
+root_bio_multiplicative_effects <- ggplot(plot_data_rbiomass, aes(x = reorder(combination, n_stressors), y = effect_size, color = classification)) +
+  geom_hline(yintercept = 0, color = "black", size = 1, linetype = "dashed") +
+  geom_point(size = 3, alpha = 0.9) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.2, alpha = 0.9) +
+  scale_color_manual(values = c("Antagonistic" = "#4363d8", "Synergistic" = "#e6194B", 
+                               "Null" = "gray50")) +
+  labs(x = "Stress Treatment", y = "Effect Size (95% CI)",
+       title = "Root Biomass",
+       color = "Interaction")
+
+#ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_bio_multiplicative_effects.svg", root_bio_multiplicative_effects)
+```
+
+#### Plotting raw data 
+```{r}
+# figure out what the mean of the control is to add the horizontal dotted line 
+tapply(mse1_clean$Root_Biomass, mse1_clean$Stress_ID, summary)
+#median root biomass for control = 71.40
+#mean root biomass for control = 85.78
+
+# plot
+root_biomass_boxplot <- ggplot(mse1_clean, aes(x = Stress_ID, y = Root_Biomass, color = Stress_ID)) + 
+  geom_boxplot(outlier.alpha = 0.4) + 
+  geom_point(size = 2, alpha = 0.4) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_hline(yintercept=71.40, linetype = "dotted") + 
+    scale_color_manual(
+    values = c(
+        "Control" = "#e6194B",
+        "MP" = "#3cb44b",
+        "Drought" = "#ffe119",
+        "Herbicide" = "#4363d8",
+        "Antibiotic" = "#f58231",
+        "Drought_MP" = "#42d4f4",
+        "Antibiotic_MP" = "#f032e6",
+        "Herbicide_MP" = "#469990",
+        "Antibiotic_Herbicide" = "#9A6324",
+        "Drought_Herbicide" = "#800000",
+        "Antibiotic_Drought" = "#911eb4",
+        "Antibiotic_Drought_Herbicide" = "#bfef45", 
+        "Antibiotic_Drought_MP" = "#808000",
+        "Antibiotic_Herbicide_MP" = "#000075",
+        "Drought_Herbicide_MP" = "#a9a9a9", 
+        "Antibiotic_Drought_Herbicide_MP" = "#000000"
+    )) + 
+  labs(y = "Root Biomass", x = "Treatment") + 
+  theme(legend.position = "none")
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_biomass_boxplot.png", root_biomass_boxplot)
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_biomass_boxplot.pdf", root_biomass_boxplot)
+```
+
+
+```{r}
+# combining the effect size plots for biomass 
+# have to replot original plots first 
+shoot_bio_multi_effects <- ggplot(plot_data, aes(x = fct_relevel(combination,
+                                                                  "Antibiotic_Drought", 
+                                                                  "Antibiotic_Herbicide", 
+                                                                  "Antibiotic_MP",
+                                                                  "Drought_Herbicide", 
+                                                                  "Drought_MP", 
+                                                                  "Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide", 
+                                                                  "Antibiotic_Drought_MP", 
+                                                                  "Antibiotic_Herbicide_MP", 
+                                                                  "Drought_Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide_MP"),
+                                                                  y = effect_size, color = classification)) +
+  geom_hline(yintercept = 0, color = "black", size = 1, linetype = "dashed") +
+  geom_point(size = 3, alpha = 0.9) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.2, alpha = 0.9) +
+  scale_color_manual(values = c("Antagonistic" = "#4363d8", "Synergistic" = "#e6194B", 
+                               "Null" = "gray50")) +
+  labs(x = "Stress Treatment", y = "Effect Size (95% CI)",
+       title = "Shoot Biomass",
+       color = "Interaction Type") + 
+  theme(axis.text.x = element_blank()) + 
+  theme(axis.title.x = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+root_bio_multiplicative_effects <- ggplot(plot_data_rbiomass, aes(x = fct_relevel(combination,
+                                                                  "Antibiotic_Drought", 
+                                                                  "Antibiotic_Herbicide", 
+                                                                  "Antibiotic_MP",
+                                                                  "Drought_Herbicide", 
+                                                                  "Drought_MP", 
+                                                                  "Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide", 
+                                                                  "Antibiotic_Drought_MP", 
+                                                                  "Antibiotic_Herbicide_MP", 
+                                                                  "Drought_Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide_MP"),
+                                                                  y = effect_size, color = classification)) +
+  geom_hline(yintercept = 0, color = "black", size = 1, linetype = "dashed") +
+  geom_point(size = 3, alpha = 0.9) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.2, alpha = 0.9) +
+  scale_color_manual(values = c("Antagonistic" = "#4363d8", "Synergistic" = "#e6194B", 
+                               "Null" = "gray50")) +
+  labs(x = "Stress Treatment", y = "Effect Size (95% CI)",
+       title = "Root Biomass",
+       color = "Interaction") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+biomass_eff_size_fig <- ggarrange(shoot_bio_multi_effects, root_bio_multiplicative_effects, 
+                                  ncol = 1, nrow = 2, 
+                                  common.legend = TRUE, legend = "right", 
+                                  align = "hv")
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/biomass_multi_eff_size_fig.png", biomass_eff_size_fig, width = 10, height = 14)
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/biomass_multi_eff_size_fig.pdf", biomass_eff_size_fig, width = 10, height = 14)
+```
+
+# Root Architecture #
+## Checking for correlations among root architecutre traits ## 
+```{r}
+# Choose only the variables you want to test the linear correlations with 
+vars <- c("Median.Number.of.Roots", "Maximum.Number.of.Roots", "Number.of.Root.Tips", 
+          "Total.Root.Length.mm", "Depth.mm", "Maximum.Width.mm", "Width-to-Depth.Ratio", 
+          "Network.Area.mm2", "Convex.Area.mm2", "Solidity", "Lower.Root.Area.mm2", 
+          "Average.Diameter.mm", "Maximum.Diameter.mm", "Perimeter.mm", 
+          "Volume.mm3", "Surface.Area.mm2", "Holes", "Average.Root.Orientation.deg", 
+          "Shallow.Angle.Frequency", "Medium.Angle.Frequency", "Steep.Angle.Frequency", 
+          "Root.Length.Diameter.Range.1.mm", "Root.Length.Diameter.Range.2.mm", 
+          "Projected.Area.Diameter.Range.1.mm2", "Projected.Area.Diameter.Range.2.mm2", 
+          "Surface.Area.Diameter.Range.1.mm2", "Surface.Area.Diameter.Range.2.mm2", 
+          "Volume.Diameter.Range.1.mm3", "Volume.Diameter.Range.2.mm3")
+
+sub_df <- mse1 %>%
+  dplyr::select(all_of(vars)) %>%
+  dplyr::select(where(is.numeric))
+
+r2_mat <- cor(sub_df, use = "pairwise.complete.obs", method = "pearson")^2
+
+r2_long <- as.data.frame(r2_mat) %>%
+  tibble::rownames_to_column("var1") %>%
+  pivot_longer(-var1, names_to = "var2", values_to = "r2") %>%
+  mutate(
+    var1 = factor(var1, levels = vars),
+    var2 = factor(var2, levels = vars),
+    i = as.integer(var1),
+    j = as.integer(var2)
+  ) %>%
+  filter(j <= i)  # Lower triangle including diagonal
+
+root_arch_corr <- ggplot(r2_long, aes(x = var2, y = var1, fill = r2)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = sprintf("%.2f", r2)), size = 3) +
+  scale_fill_gradient(low = "white", high = "steelblue", limits = c(0, 1)) +
+  coord_equal() +
+  scale_x_discrete(limits = vars) +
+  scale_y_discrete(limits = rev(vars)) +
+  labs(x = NULL, y = NULL, fill = expression(R^2),
+       title = expression("Lower-triangle " * R^2 * " heat map")) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid = element_blank(),
+    # Rotate x-axis labels 90 degrees
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)
+  )
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_arch_corr.svg", root_arch_corr, width = 14, height = 14)
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_arch_coor.pdf", root_arch_corr, width = 14, height = 14)
+```
+
+## Multivariate summary of root traits across stress treatments ## 
+```{r}
+traits <- mse1_clean %>% dplyr::select(Depth.mm, Total.Root.Length.mm, Average.Diameter.mm, Average.Root.Orientation.deg, Volume.mm3, 
+                                Convex.Area.mm2, Maximum.Number.of.Roots, Maximum.Width.mm, Maximum.Diameter.mm, Number.of.Root.Tips, 
+                                Medium.Angle.Frequency, `Width-to-Depth.Ratio`) %>% 
+  scale()
+
+pca <- prcomp(traits, center = TRUE, scale. = FALSE)
+
+# Proportion of variance explained by each PC
+var_explained <- summary(pca)$importance["Proportion of Variance", ]
+
+# Percent variance for PC1 and PC2
+pc1_var <- var_explained[1] * 100
+pc2_var <- var_explained[2] * 100
+
+pc1_var
+pc2_var
+
+# plotting 
+scores <- as.data.frame(pca$x[, 1:2])
+scores$sample_id <- mse1_clean$ID
+scores$stress_id <- mse1_clean$Stress_ID
+scores$num_stress <- mse1_clean$Num_Stress
+
+root_arch_pca <- ggplot(scores, aes(PC1, PC2, color = stress_id)) +
+  geom_point(size = 5, alpha = 0.85) +
+  labs(color = "Treatment") + 
+  scale_color_manual(
+    values = c(
+        "Control" = "#e6194B",
+        "MP" = "#3cb44b",
+        "Drought" = "#ffe119",
+        "Herbicide" = "#4363d8",
+        "Antibiotic" = "#f58231",
+        "Drought_MP" = "#42d4f4",
+        "Antibiotic_MP" = "#f032e6",
+        "Herbicide_MP" = "#469990",
+        "Antibiotic_Herbicide" = "#9A6324",
+        "Drought_Herbicide" = "#800000",
+        "Antibiotic_Drought" = "#911eb4",
+        "Antibiotic_Drought_Herbicide" = "#bfef45", 
+        "Antibiotic_Drought_MP" = "#808000",
+        "Antibiotic_Herbicide_MP" = "#000075",
+        "Drought_Herbicide_MP" = "#a9a9a9", 
+        "Antibiotic_Drought_Herbicide_MP" = "#000000"
+    ))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_arch_pca.png", root_arch_pca, width = 10, height = 10)
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_arch_pca.pdf", root_arch_pca, width = 11, height = 10)
+```
+
+## Root Depth ##
+#### Calculating the multiplicative null model estimates and effect sizes 
+```{r}
+analyze_all_combos_depth <- function(mse1) {
+  
+  # extract all treatment summaries
+  treatment_summaries <- mse1 %>% 
+    group_by(Stress_ID) %>% 
+    summarize( 
+      mean_depth = mean(Depth.mm, na.rm = TRUE), 
+      sd_depth = sd(Depth.mm, na.rm = TRUE), 
+      n = n(), 
+      .groups = "drop")
+  # define all combinations to test 
+  combinations <- list(
+    #pairwise 
+    list(singles = c("MP", "Drought"), combo = "Drought_MP"), 
+    list(singles = c("MP", "Herbicide"), combo = "Herbicide_MP"), 
+    list(singles = c("MP", "Antibiotic"), combo = "Antibiotic_MP"), 
+    list(singles = c("Drought", "Herbicide"), combo = "Drought_Herbicide"),
+    list(singles = c("Drought", "Antibiotic"), combo = "Antibiotic_Drought"),
+    list(singles = c("Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide"),
+    #three-way 
+    list(singles = c("MP", "Drought", "Herbicide"), combo = "Drought_Herbicide_MP"), 
+    list(singles = c("MP", "Drought", "Antibiotic"), combo = "Antibiotic_Drought_MP"), 
+    list(singles = c("MP", "Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide_MP"), 
+    list(singles = c("Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide"),
+    #four-way 
+    list(singles = c("MP", "Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide_MP")
+  )
+  calculate_effect_size_depth <- function(combo_info, summaries) {
+    control <- summaries %>% filter(Stress_ID == "Control")
+    combo_data_depth <- summaries %>% filter(Stress_ID == combo_info$combo)
+    
+    if(nrow(control) == 0 | nrow(combo_data_depth) == 0) return(NULL)
+    
+    # get single stressor data 
+    single_data <- map_dfr(combo_info$singles, ~{
+      summaries %>% filter(Stress_ID == .x)
+    })
+    
+    if(nrow(single_data) == 0) return(NULL)
+    
+    # multiplicative expectation 
+    single_means <- single_data$mean_depth
+    Xc <-  control$mean_depth
+    X_obs <- combo_data_depth$mean_depth
+    
+    X_exp <- prod(single_means) / Xc^(length(single_means) -1)
+    
+    # simple effect size 
+    ES <- log(X_obs) - log(X_exp)
+    
+    # VARIANCE using delta method (all treatments contribute)
+  k <- length(single_means)  # number of single stressors
+  
+  var_ES <- (
+    combo_data_depth$sd_depth^2 / (combo_data_depth$n * X_obs^2) +           # Observed combo
+    sum(single_data$sd_depth^2 / (single_data$n * single_data$mean_depth^2)) +  # Singles
+    (k - 1) * (control$sd_depth^2 / (control$n * Xc^2))          # Control (raised to k-1)
+  )
+  
+  SE <- sqrt(var_ES)
+  CI_lower <- ES - 1.96 * SE
+  CI_upper <- ES + 1.96 * SE
+  
+  # Classification
+  classification <- case_when(
+    CI_lower > 0 ~ "Synergistic",
+    CI_upper < 0 ~ "Antagonistic",
+    CI_lower <= 0 & CI_upper >= 0 ~ "Null",
+    TRUE ~ "Reversal"
+  )
+  
+    data.frame(
+      combination = combo_info$combo,
+      singles_used = paste(combo_info$singles, collapse = "_"), 
+      observed = X_obs, 
+      expected = X_exp, 
+      effect_size = ES, 
+      SE = SE, 
+      CI_lower = CI_lower, 
+      CI_upper = CI_upper,
+      classification = classification,
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # apply to all combos 
+  results_depth <- map_dfr(combinations, ~calculate_effect_size_depth(.x, treatment_summaries))
+  return(results_depth)
+} 
+
+# run it 
+results_depth <- analyze_all_combos_depth(mse1)
+print(results_depth)
+```
+
+#### Plotting the effect sizes
+```{r}
+plot_data_depth <- results_depth %>%
+  mutate(n_stressors = str_count(singles_used, "_") + 2)
+
+root_depth_multiplicative_effects <- ggplot(plot_data_depth, aes(x = fct_relevel(combination,
+                                                                  "Antibiotic_Drought", 
+                                                                  "Antibiotic_Herbicide", 
+                                                                  "Antibiotic_MP",
+                                                                  "Drought_Herbicide", 
+                                                                  "Drought_MP", 
+                                                                  "Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide", 
+                                                                  "Antibiotic_Drought_MP", 
+                                                                  "Antibiotic_Herbicide_MP", 
+                                                                  "Drought_Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide_MP"), 
+                                                                 y = effect_size, color = classification)) +
+  geom_hline(yintercept = 0, color = "black", size = 1, linetype = "dashed") +
+  geom_point(size = 3, alpha = 0.9) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.2, alpha = 0.9) +
+  coord_flip() +
+  scale_color_manual(values = c("Antagonistic" = "#4363d8", "Synergistic" = "#e6194B", 
+                               "Null" = "gray50")) +
+  labs(x = "Stress Treatment",
+       title = "Depth",
+       color = "Interaction Type") + 
+  theme(axis.title.y = element_blank(), 
+        axis.text.y = element_blank(), 
+        axis.title.x = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_depth_multiplicative_effects.svg", root_depth_multiplicative_effects)
+```
+
+## Number of Root Tips ##
+#### Calculating the multiplicative model estimates and effect sizes 
+```{r}
+analyze_all_combos_tips <- function(mse1) {
+  
+  # extract all treatment summaries
+  treatment_summaries <- mse1 %>% 
+    group_by(Stress_ID) %>% 
+    summarize( 
+      mean_tips = mean(Number.of.Root.Tips, na.rm = TRUE), 
+      sd_tips = sd(Number.of.Root.Tips, na.rm = TRUE), 
+      n = n(), 
+      .groups = "drop")
+  # define all combinations to test 
+  combinations <- list(
+    #pairwise 
+    list(singles = c("MP", "Drought"), combo = "Drought_MP"), 
+    list(singles = c("MP", "Herbicide"), combo = "Herbicide_MP"), 
+    list(singles = c("MP", "Antibiotic"), combo = "Antibiotic_MP"), 
+    list(singles = c("Drought", "Herbicide"), combo = "Drought_Herbicide"),
+    list(singles = c("Drought", "Antibiotic"), combo = "Antibiotic_Drought"),
+    list(singles = c("Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide"),
+    #three-way 
+    list(singles = c("MP", "Drought", "Herbicide"), combo = "Drought_Herbicide_MP"), 
+    list(singles = c("MP", "Drought", "Antibiotic"), combo = "Antibiotic_Drought_MP"), 
+    list(singles = c("MP", "Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide_MP"), 
+    list(singles = c("Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide"),
+    #four-way 
+    list(singles = c("MP", "Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide_MP")
+  )
+  calculate_effect_size_tips <- function(combo_info, summaries) {
+    control <- summaries %>% filter(Stress_ID == "Control")
+    combo_data_tips <- summaries %>% filter(Stress_ID == combo_info$combo)
+    
+    if(nrow(control) == 0 | nrow(combo_data_tips) == 0) return(NULL)
+    
+    # get single stressor data 
+    single_data <- map_dfr(combo_info$singles, ~{
+      summaries %>% filter(Stress_ID == .x)
+    })
+    
+    if(nrow(single_data) == 0) return(NULL)
+    
+    # multiplicative expectation 
+    single_means <- single_data$mean_tips
+    Xc <-  control$mean_tips
+    X_obs <- combo_data_tips$mean_tips
+    
+    X_exp <- prod(single_means) / Xc^(length(single_means) -1)
+    
+    # simple effect size 
+    ES <- log(X_obs) - log(X_exp)
+    
+    # VARIANCE using delta method (all treatments contribute)
+  k <- length(single_means)  # number of single stressors
+  
+  var_ES <- (
+    combo_data_tips$sd_tips^2 / (combo_data_tips$n * X_obs^2) +           # Observed combo
+    sum(single_data$sd_tips^2 / (single_data$n * single_data$mean_tips^2)) +  # Singles
+    (k - 1) * (control$sd_tips^2 / (control$n * Xc^2))          # Control (raised to k-1)
+  )
+  
+  SE <- sqrt(var_ES)
+  CI_lower <- ES - 1.96 * SE
+  CI_upper <- ES + 1.96 * SE
+  
+  # Classification
+  classification <- case_when(
+    CI_lower > 0 ~ "Synergistic",
+    CI_upper < 0 ~ "Antagonistic",
+    CI_lower <= 0 & CI_upper >= 0 ~ "Null",
+    TRUE ~ "Reversal"
+  )
+  
+    data.frame(
+      combination = combo_info$combo,
+      singles_used = paste(combo_info$singles, collapse = "_"), 
+      observed = X_obs, 
+      expected = X_exp, 
+      effect_size = ES, 
+      SE = SE, 
+      CI_lower = CI_lower, 
+      CI_upper = CI_upper,
+      classification = classification,
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # apply to all combos 
+  results_tips <- map_dfr(combinations, ~calculate_effect_size_tips(.x, treatment_summaries))
+  return(results_tips)
+} 
+
+# run it 
+results_tips <- analyze_all_combos_tips(mse1)
+print(results_tips)
+```
+
+#### Plotting effect sizes
+```{r}
+plot_data_tips <- results_tips %>%
+  mutate(n_stressors = str_count(singles_used, "_") + 2)
+
+root_tips_multi_effects <- ggplot(plot_data_tips, aes(x = fct_relevel(combination,
+                                                                  "Antibiotic_Drought", 
+                                                                  "Antibiotic_Herbicide", 
+                                                                  "Antibiotic_MP",
+                                                                  "Drought_Herbicide", 
+                                                                  "Drought_MP", 
+                                                                  "Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide", 
+                                                                  "Antibiotic_Drought_MP", 
+                                                                  "Antibiotic_Herbicide_MP", 
+                                                                  "Drought_Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide_MP"), 
+                                                      y = effect_size, color = classification)) +
+  geom_hline(yintercept = 0, color = "black", size = 1, linetype = "dashed") +
+  geom_point(size = 3, alpha = 0.9) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.2, alpha = 0.9) +
+  coord_flip() +
+  scale_color_manual(values = c("Antagonistic" = "#4363d8", "Synergistic" = "#e6194B", 
+                               "Null" = "gray50")) +
+  labs(x = "Stress Treatment",
+       title = "Number of Tips",
+       color = "Interaction") + 
+  theme(axis.title.x = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_tips_multi_effects.svg", root_tips_multi_effects)
+```
+
+## Average Root Diameter ##
+#### Calculating the multiplicative model estimates and effect sizes
+```{r}
+analyze_all_combos_diameter <- function(mse1) {
+  
+  # extract all treatment summaries
+  treatment_summaries <- mse1 %>% 
+    group_by(Stress_ID) %>% 
+    summarize( 
+      mean_diameter = mean(Average.Diameter.mm, na.rm = TRUE), 
+      sd_diameter = sd(Average.Diameter.mm, na.rm = TRUE), 
+      n = n(), 
+      .groups = "drop")
+  # define all combinations to test 
+  combinations <- list(
+    #pairwise 
+    list(singles = c("MP", "Drought"), combo = "Drought_MP"), 
+    list(singles = c("MP", "Herbicide"), combo = "Herbicide_MP"), 
+    list(singles = c("MP", "Antibiotic"), combo = "Antibiotic_MP"), 
+    list(singles = c("Drought", "Herbicide"), combo = "Drought_Herbicide"),
+    list(singles = c("Drought", "Antibiotic"), combo = "Antibiotic_Drought"),
+    list(singles = c("Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide"),
+    #three-way 
+    list(singles = c("MP", "Drought", "Herbicide"), combo = "Drought_Herbicide_MP"), 
+    list(singles = c("MP", "Drought", "Antibiotic"), combo = "Antibiotic_Drought_MP"), 
+    list(singles = c("MP", "Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide_MP"), 
+    list(singles = c("Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide"),
+    #four-way 
+    list(singles = c("MP", "Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide_MP")
+  )
+  calculate_effect_size_diameter <- function(combo_info, summaries) {
+    control <- summaries %>% filter(Stress_ID == "Control")
+    combo_data_diameter <- summaries %>% filter(Stress_ID == combo_info$combo)
+    
+    if(nrow(control) == 0 | nrow(combo_data_diameter) == 0) return(NULL)
+    
+    # get single stressor data 
+    single_data <- map_dfr(combo_info$singles, ~{
+      summaries %>% filter(Stress_ID == .x)
+    })
+    
+    if(nrow(single_data) == 0) return(NULL)
+    
+    # multiplicative expectation 
+    single_means <- single_data$mean_diameter
+    Xc <-  control$mean_diameter
+    X_obs <- combo_data_diameter$mean_diameter
+    
+    X_exp <- prod(single_means) / Xc^(length(single_means) -1)
+    
+    # simple effect size 
+    ES <- log(X_obs) - log(X_exp)
+    
+    # VARIANCE using delta method (all treatments contribute)
+  k <- length(single_means)  # number of single stressors
+  
+  var_ES <- (
+    combo_data_diameter$sd_diameter^2 / (combo_data_diameter$n * X_obs^2) +           # Observed combo
+    sum(single_data$sd_diameter^2 / (single_data$n * single_data$mean_diameter^2)) +  # Singles
+    (k - 1) * (control$sd_diameter^2 / (control$n * Xc^2))          # Control (raised to k-1)
+  )
+  
+  SE <- sqrt(var_ES)
+  CI_lower <- ES - 1.96 * SE
+  CI_upper <- ES + 1.96 * SE
+  
+  # Classification
+  classification <- case_when(
+    CI_lower > 0 ~ "Synergistic",
+    CI_upper < 0 ~ "Antagonistic",
+    CI_lower <= 0 & CI_upper >= 0 ~ "Null",
+    TRUE ~ "Reversal"
+  )
+  
+    data.frame(
+      combination = combo_info$combo,
+      singles_used = paste(combo_info$singles, collapse = "_"), 
+      observed = X_obs, 
+      expected = X_exp, 
+      effect_size = ES, 
+      SE = SE, 
+      CI_lower = CI_lower, 
+      CI_upper = CI_upper,
+      classification = classification,
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # apply to all combos 
+  results_diameter <- map_dfr(combinations, ~calculate_effect_size_diameter(.x, treatment_summaries))
+  return(results_diameter)
+} 
+
+# run it 
+results_diameter <- analyze_all_combos_diameter(mse1)
+print(results_diameter )
+```
+
+#### Plotting effect sizes 
+```{r}
+plot_data_diameter <- results_diameter %>%
+  mutate(n_stressors = str_count(singles_used, "_") + 2)
+
+root_diameter_multi_effects <- ggplot(plot_data_diameter, aes(x = fct_relevel(combination,
+                                                                  "Antibiotic_Drought", 
+                                                                  "Antibiotic_Herbicide", 
+                                                                  "Antibiotic_MP",
+                                                                  "Drought_Herbicide", 
+                                                                  "Drought_MP", 
+                                                                  "Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide", 
+                                                                  "Antibiotic_Drought_MP", 
+                                                                  "Antibiotic_Herbicide_MP", 
+                                                                  "Drought_Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide_MP"),
+                                                              y = effect_size, color = classification)) +
+  geom_hline(yintercept = 0, color = "black", size = 1, linetype = "dashed") +
+  geom_point(size = 3, alpha = 0.9) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.2, alpha = 0.9) +
+  coord_flip() +
+  scale_color_manual(values = c("Antagonistic" = "#4363d8", "Synergistic" = "#e6194B", 
+                               "Null" = "gray50")) +
+  labs(x = "Stress Treatment",
+       title = "Avg. Diameter",
+       color = "Interaction") + 
+  theme(axis.text.y = element_blank(), 
+        axis.title.y = element_blank(), 
+        axis.title.x = element_blank()) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_diameter_multi_effects.svg", root_diameter_multi_effects)
+```
+
+## Total Root Length ##
+#### Calculating the multiplicative model estimates and effect sizes
+```{r}
+analyze_all_combos_length <- function(mse1) {
+  
+  # extract all treatment summaries
+  treatment_summaries <- mse1 %>% 
+    group_by(Stress_ID) %>% 
+    summarize( 
+      mean_length = mean(Total.Root.Length.mm, na.rm = TRUE), 
+      sd_length = sd(Total.Root.Length.mm, na.rm = TRUE), 
+      n = n(), 
+      .groups = "drop")
+  # define all combinations to test 
+  combinations <- list(
+    #pairwise 
+    list(singles = c("MP", "Drought"), combo = "Drought_MP"), 
+    list(singles = c("MP", "Herbicide"), combo = "Herbicide_MP"), 
+    list(singles = c("MP", "Antibiotic"), combo = "Antibiotic_MP"), 
+    list(singles = c("Drought", "Herbicide"), combo = "Drought_Herbicide"),
+    list(singles = c("Drought", "Antibiotic"), combo = "Antibiotic_Drought"),
+    list(singles = c("Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide"),
+    #three-way 
+    list(singles = c("MP", "Drought", "Herbicide"), combo = "Drought_Herbicide_MP"), 
+    list(singles = c("MP", "Drought", "Antibiotic"), combo = "Antibiotic_Drought_MP"), 
+    list(singles = c("MP", "Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide_MP"), 
+    list(singles = c("Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide"),
+    #four-way 
+    list(singles = c("MP", "Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide_MP")
+  )
+  calculate_effect_size_length <- function(combo_info, summaries) {
+    control <- summaries %>% filter(Stress_ID == "Control")
+    combo_data_length <- summaries %>% filter(Stress_ID == combo_info$combo)
+    
+    if(nrow(control) == 0 | nrow(combo_data_length) == 0) return(NULL)
+    
+    # get single stressor data 
+    single_data <- map_dfr(combo_info$singles, ~{
+      summaries %>% filter(Stress_ID == .x)
+    })
+    
+    if(nrow(single_data) == 0) return(NULL)
+    
+    # multiplicative expectation 
+    single_means <- single_data$mean_length
+    Xc <-  control$mean_length
+    X_obs <- combo_data_length$mean_length
+    
+    X_exp <- prod(single_means) / Xc^(length(single_means) -1)
+    
+    # simple effect size 
+    ES <- log(X_obs) - log(X_exp)
+    
+    # VARIANCE using delta method (all treatments contribute)
+  k <- length(single_means)  # number of single stressors
+  
+  var_ES <- (
+    combo_data_length$sd_length^2 / (combo_data_length$n * X_obs^2) +           # Observed combo
+    sum(single_data$sd_length^2 / (single_data$n * single_data$mean_length^2)) +  # Singles
+    (k - 1) * (control$sd_length^2 / (control$n * Xc^2))          # Control (raised to k-1)
+  )
+  
+  SE <- sqrt(var_ES)
+  CI_lower <- ES - 1.96 * SE
+  CI_upper <- ES + 1.96 * SE
+  
+  # Classification
+  classification <- case_when(
+    CI_lower > 0 ~ "Synergistic",
+    CI_upper < 0 ~ "Antagonistic",
+    CI_lower <= 0 & CI_upper >= 0 ~ "Null",
+    TRUE ~ "Reversal"
+  )
+  
+    data.frame(
+      combination = combo_info$combo,
+      singles_used = paste(combo_info$singles, collapse = "_"), 
+      observed = X_obs, 
+      expected = X_exp, 
+      effect_size = ES, 
+      SE = SE, 
+      CI_lower = CI_lower, 
+      CI_upper = CI_upper,
+      classification = classification,
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # apply to all combos 
+  results_length <- map_dfr(combinations, ~calculate_effect_size_length(.x, treatment_summaries))
+  return(results_length)
+} 
+
+# run it 
+results_length <- analyze_all_combos_length(mse1)
+print(results_length)
+```
+
+#### Plotting effect sizes 
+```{r}
+plot_data_length <- results_length %>%
+  mutate(n_stressors = str_count(singles_used, "_") + 2)
+
+root_length_multi_effects <- ggplot(plot_data_length, aes(x = fct_relevel(combination,
+                                                                  "Antibiotic_Drought", 
+                                                                  "Antibiotic_Herbicide", 
+                                                                  "Antibiotic_MP",
+                                                                  "Drought_Herbicide", 
+                                                                  "Drought_MP", 
+                                                                  "Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide", 
+                                                                  "Antibiotic_Drought_MP", 
+                                                                  "Antibiotic_Herbicide_MP", 
+                                                                  "Drought_Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide_MP"),
+                                                          y = effect_size, color = classification)) +
+  geom_hline(yintercept = 0, color = "black", size = 1, linetype = "dashed") +
+  geom_point(size = 3, alpha = 0.9) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.2, alpha = 0.9) +
+  coord_flip() +
+  scale_color_manual(values = c("Antagonistic" = "#4363d8", "Synergistic" = "#e6194B", 
+                               "Null" = "gray50")) +
+  labs(x = "Stress Treatment",
+       title = "Total Root Length",
+       color = "Interaction") + 
+  theme(axis.title.x = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_length_multi_effects.svg", root_length_multi_effects)
+```
+
+## Average Root Orientation ##
+#### Calculating the multiplicative model estimates and effect sizes
+```{r}
+analyze_all_combos_orientation <- function(mse1) {
+  
+  # extract all treatment summaries
+  treatment_summaries <- mse1 %>% 
+    group_by(Stress_ID) %>% 
+    summarize( 
+      mean_orientation = mean(Average.Root.Orientation.deg, na.rm = TRUE), 
+      sd_orientation = sd(Average.Root.Orientation.deg, na.rm = TRUE), 
+      n = n(), 
+      .groups = "drop")
+  # define all combinations to test 
+  combinations <- list(
+    #pairwise 
+    list(singles = c("MP", "Drought"), combo = "Drought_MP"), 
+    list(singles = c("MP", "Herbicide"), combo = "Herbicide_MP"), 
+    list(singles = c("MP", "Antibiotic"), combo = "Antibiotic_MP"), 
+    list(singles = c("Drought", "Herbicide"), combo = "Drought_Herbicide"),
+    list(singles = c("Drought", "Antibiotic"), combo = "Antibiotic_Drought"),
+    list(singles = c("Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide"),
+    #three-way 
+    list(singles = c("MP", "Drought", "Herbicide"), combo = "Drought_Herbicide_MP"), 
+    list(singles = c("MP", "Drought", "Antibiotic"), combo = "Antibiotic_Drought_MP"), 
+    list(singles = c("MP", "Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide_MP"), 
+    list(singles = c("Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide"),
+    #four-way 
+    list(singles = c("MP", "Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide_MP")
+  )
+  calculate_effect_size_orientation <- function(combo_info, summaries) {
+    control <- summaries %>% filter(Stress_ID == "Control")
+    combo_data_orientation <- summaries %>% filter(Stress_ID == combo_info$combo)
+    
+    if(nrow(control) == 0 | nrow(combo_data_orientation) == 0) return(NULL)
+    
+    # get single stressor data 
+    single_data <- map_dfr(combo_info$singles, ~{
+      summaries %>% filter(Stress_ID == .x)
+    })
+    
+    if(nrow(single_data) == 0) return(NULL)
+    
+    # multiplicative expectation 
+    single_means <- single_data$mean_orientation
+    Xc <-  control$mean_orientation
+    X_obs <- combo_data_orientation$mean_orientation
+    
+    X_exp <- prod(single_means) / Xc^(length(single_means) -1)
+    
+    # simple effect size 
+    ES <- log(X_obs) - log(X_exp)
+    
+    # VARIANCE using delta method (all treatments contribute)
+  k <- length(single_means)  # number of single stressors
+  
+  var_ES <- (
+    combo_data_orientation$sd_orientation^2 / (combo_data_orientation$n * X_obs^2) +           # Observed combo
+    sum(single_data$sd_orientation^2 / (single_data$n * single_data$mean_orientation^2)) +  # Singles
+    (k - 1) * (control$sd_orientation^2 / (control$n * Xc^2))          # Control (raised to k-1)
+  )
+  
+  SE <- sqrt(var_ES)
+  CI_lower <- ES - 1.96 * SE
+  CI_upper <- ES + 1.96 * SE
+  
+  # Classification
+  classification <- case_when(
+    CI_lower > 0 ~ "Synergistic",
+    CI_upper < 0 ~ "Antagonistic",
+    CI_lower <= 0 & CI_upper >= 0 ~ "Null",
+    TRUE ~ "Reversal"
+  )
+  
+    data.frame(
+      combination = combo_info$combo,
+      singles_used = paste(combo_info$singles, collapse = "_"), 
+      observed = X_obs, 
+      expected = X_exp, 
+      effect_size = ES, 
+      SE = SE, 
+      CI_lower = CI_lower, 
+      CI_upper = CI_upper,
+      classification = classification,
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # apply to all combos 
+  results_orientation <- map_dfr(combinations, ~calculate_effect_size_orientation(.x, treatment_summaries))
+  return(results_orientation)
+} 
+
+# run it 
+results_orientation <- analyze_all_combos_orientation(mse1)
+print(results_orientation)
+```
+
+#### Plotting effect sizes 
+```{r}
+plot_data_orientation <- results_orientation %>%
+  mutate(n_stressors = str_count(singles_used, "_") + 2)
+
+root_orientation_multi_effects <- ggplot(plot_data_orientation, aes(x = fct_relevel(combination,
+                                                                  "Antibiotic_Drought", 
+                                                                  "Antibiotic_Herbicide", 
+                                                                  "Antibiotic_MP",
+                                                                  "Drought_Herbicide", 
+                                                                  "Drought_MP", 
+                                                                  "Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide", 
+                                                                  "Antibiotic_Drought_MP", 
+                                                                  "Antibiotic_Herbicide_MP", 
+                                                                  "Drought_Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide_MP"),
+                                                          y = effect_size, color = classification)) +
+  geom_hline(yintercept = 0, color = "black", size = 1, linetype = "dashed") +
+  geom_point(size = 3, alpha = 0.9) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.2, alpha = 0.9) +
+  coord_flip() +
+  scale_color_manual(values = c("Antagonistic" = "#4363d8", "Synergistic" = "#e6194B", 
+                               "Null" = "gray50")) +
+  labs(x = "Stress Treatment", y = "Effect Size (95% CI)",
+       title = "Avg. Root Orientation",
+       color = "Interaction") + 
+  theme(axis.title.y = element_blank(), 
+       axis.text.y = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+#ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_orientation_multi_effects.svg", root_orientation_multi_effects)
+```
+
+## Maximum Number of Roots ## 
+#### Calculating the multiplicative model estimates and effect sizes
+```{r}
+analyze_all_combos_maxroots <- function(mse1) {
+  
+  # extract all treatment summaries
+  treatment_summaries <- mse1 %>% 
+    group_by(Stress_ID) %>% 
+    summarize( 
+      mean_maxroots = mean(Maximum.Number.of.Roots, na.rm = TRUE), 
+      sd_maxroots = sd(Maximum.Number.of.Roots, na.rm = TRUE), 
+      n = n(), 
+      .groups = "drop")
+  # define all combinations to test 
+  combinations <- list(
+    #pairwise 
+    list(singles = c("MP", "Drought"), combo = "Drought_MP"), 
+    list(singles = c("MP", "Herbicide"), combo = "Herbicide_MP"), 
+    list(singles = c("MP", "Antibiotic"), combo = "Antibiotic_MP"), 
+    list(singles = c("Drought", "Herbicide"), combo = "Drought_Herbicide"),
+    list(singles = c("Drought", "Antibiotic"), combo = "Antibiotic_Drought"),
+    list(singles = c("Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide"),
+    #three-way 
+    list(singles = c("MP", "Drought", "Herbicide"), combo = "Drought_Herbicide_MP"), 
+    list(singles = c("MP", "Drought", "Antibiotic"), combo = "Antibiotic_Drought_MP"), 
+    list(singles = c("MP", "Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide_MP"), 
+    list(singles = c("Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide"),
+    #four-way 
+    list(singles = c("MP", "Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide_MP")
+  )
+  calculate_effect_size_maxroots <- function(combo_info, summaries) {
+    control <- summaries %>% filter(Stress_ID == "Control")
+    combo_data_maxroots <- summaries %>% filter(Stress_ID == combo_info$combo)
+    
+    if(nrow(control) == 0 | nrow(combo_data_maxroots) == 0) return(NULL)
+    
+    # get single stressor data 
+    single_data <- map_dfr(combo_info$singles, ~{
+      summaries %>% filter(Stress_ID == .x)
+    })
+    
+    if(nrow(single_data) == 0) return(NULL)
+    
+    # multiplicative expectation 
+    single_means <- single_data$mean_maxroots
+    Xc <-  control$mean_maxroots
+    X_obs <- combo_data_maxroots$mean_maxroots
+    
+    X_exp <- prod(single_means) / Xc^(length(single_means) -1)
+    
+    # simple effect size 
+    ES <- log(X_obs) - log(X_exp)
+    
+    # VARIANCE using delta method (all treatments contribute)
+  k <- length(single_means)  # number of single stressors
+  
+  var_ES <- (
+    combo_data_maxroots$sd_maxroots^2 / (combo_data_maxroots$n * X_obs^2) +           # Observed combo
+    sum(single_data$sd_maxroots^2 / (single_data$n * single_data$mean_maxroots^2)) +  # Singles
+    (k - 1) * (control$sd_maxroots^2 / (control$n * Xc^2))          # Control (raised to k-1)
+  )
+  
+  SE <- sqrt(var_ES)
+  CI_lower <- ES - 1.96 * SE
+  CI_upper <- ES + 1.96 * SE
+  
+  # Classification
+  classification <- case_when(
+    CI_lower > 0 ~ "Synergistic",
+    CI_upper < 0 ~ "Antagonistic",
+    CI_lower <= 0 & CI_upper >= 0 ~ "Null",
+    TRUE ~ "Reversal"
+  )
+  
+    data.frame(
+      combination = combo_info$combo,
+      singles_used = paste(combo_info$singles, collapse = "_"), 
+      observed = X_obs, 
+      expected = X_exp, 
+      effect_size = ES, 
+      SE = SE, 
+      CI_lower = CI_lower, 
+      CI_upper = CI_upper,
+      classification = classification,
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # apply to all combos 
+  results_maxroots <- map_dfr(combinations, ~calculate_effect_size_maxroots(.x, treatment_summaries))
+  return(results_maxroots)
+} 
+
+# run it 
+results_maxroots <- analyze_all_combos_maxroots(mse1)
+print(results_maxroots)
+```
+
+#### Plotting effect sizes 
+```{r}
+plot_data_maxroots <- results_maxroots %>%
+  mutate(n_stressors = str_count(singles_used, "_") + 2)
+
+max_root_multi_effects <- ggplot(plot_data_maxroots, aes(x = fct_relevel(combination,
+                                                                  "Antibiotic_Drought", 
+                                                                  "Antibiotic_Herbicide", 
+                                                                  "Antibiotic_MP",
+                                                                  "Drought_Herbicide", 
+                                                                  "Drought_MP", 
+                                                                  "Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide", 
+                                                                  "Antibiotic_Drought_MP", 
+                                                                  "Antibiotic_Herbicide_MP", 
+                                                                  "Drought_Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide_MP"),
+                                                          y = effect_size, color = classification)) +
+  geom_hline(yintercept = 0, color = "black", size = 1, linetype = "dashed") +
+  geom_point(size = 3, alpha = 0.9) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.2, alpha = 0.9) +
+  coord_flip() +
+  scale_color_manual(values = c("Antagonistic" = "#4363d8", "Synergistic" = "#e6194B", 
+                               "Null" = "gray50")) +
+  labs(x = "Stress Treatment", y = "Effect Size (95% CI)",
+       title = "Max. Number of Roots",
+       color = "Interaction") + 
+  theme(axis.title.y = element_blank(), 
+        axis.text.y = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/max_root_multi_effects.svg", max_root_multi_effects)
+```
+
+## Maximum Width ## 
+#### Calculating the multiplicative model estimates and effect sizes
+```{r}
+analyze_all_combos_width <- function(mse1) {
+  
+  # extract all treatment summaries
+  treatment_summaries <- mse1 %>% 
+    group_by(Stress_ID) %>% 
+    summarize( 
+      mean_width = mean(Maximum.Width.mm, na.rm = TRUE), 
+      sd_width = sd(Maximum.Width.mm, na.rm = TRUE), 
+      n = n(), 
+      .groups = "drop")
+  # define all combinations to test 
+  combinations <- list(
+    #pairwise 
+    list(singles = c("MP", "Drought"), combo = "Drought_MP"), 
+    list(singles = c("MP", "Herbicide"), combo = "Herbicide_MP"), 
+    list(singles = c("MP", "Antibiotic"), combo = "Antibiotic_MP"), 
+    list(singles = c("Drought", "Herbicide"), combo = "Drought_Herbicide"),
+    list(singles = c("Drought", "Antibiotic"), combo = "Antibiotic_Drought"),
+    list(singles = c("Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide"),
+    #three-way 
+    list(singles = c("MP", "Drought", "Herbicide"), combo = "Drought_Herbicide_MP"), 
+    list(singles = c("MP", "Drought", "Antibiotic"), combo = "Antibiotic_Drought_MP"), 
+    list(singles = c("MP", "Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide_MP"), 
+    list(singles = c("Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide"),
+    #four-way 
+    list(singles = c("MP", "Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide_MP")
+  )
+  calculate_effect_size_width <- function(combo_info, summaries) {
+    control <- summaries %>% filter(Stress_ID == "Control")
+    combo_data_width <- summaries %>% filter(Stress_ID == combo_info$combo)
+    
+    if(nrow(control) == 0 | nrow(combo_data_width) == 0) return(NULL)
+    
+    # get single stressor data 
+    single_data <- map_dfr(combo_info$singles, ~{
+      summaries %>% filter(Stress_ID == .x)
+    })
+    
+    if(nrow(single_data) == 0) return(NULL)
+    
+    # multiplicative expectation 
+    single_means <- single_data$mean_width
+    Xc <-  control$mean_width
+    X_obs <- combo_data_width$mean_width
+    
+    X_exp <- prod(single_means) / Xc^(length(single_means) -1)
+    
+    # simple effect size 
+    ES <- log(X_obs) - log(X_exp)
+    
+    # VARIANCE using delta method (all treatments contribute)
+  k <- length(single_means)  # number of single stressors
+  
+  var_ES <- (
+    combo_data_width$sd_width^2 / (combo_data_width$n * X_obs^2) +           # Observed combo
+    sum(single_data$sd_width^2 / (single_data$n * single_data$mean_width^2)) +  # Singles
+    (k - 1) * (control$sd_width^2 / (control$n * Xc^2))          # Control (raised to k-1)
+  )
+  
+  SE <- sqrt(var_ES)
+  CI_lower <- ES - 1.96 * SE
+  CI_upper <- ES + 1.96 * SE
+  
+  # Classification
+  classification <- case_when(
+    CI_lower > 0 ~ "Synergistic",
+    CI_upper < 0 ~ "Antagonistic",
+    CI_lower <= 0 & CI_upper >= 0 ~ "Null",
+    TRUE ~ "Reversal"
+  )
+  
+    data.frame(
+      combination = combo_info$combo,
+      singles_used = paste(combo_info$singles, collapse = "_"), 
+      observed = X_obs, 
+      expected = X_exp, 
+      effect_size = ES, 
+      SE = SE, 
+      CI_lower = CI_lower, 
+      CI_upper = CI_upper,
+      classification = classification,
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # apply to all combos 
+  results_width <- map_dfr(combinations, ~calculate_effect_size_width(.x, treatment_summaries))
+  return(results_width)
+} 
+
+# run it 
+results_width <- analyze_all_combos_width(mse1)
+print(results_width)
+```
+
+#### Plotting effect sizes 
+```{r}
+plot_data_width <- results_width %>%
+  mutate(n_stressors = str_count(singles_used, "_") + 2)
+
+root_width_multi_effects <- ggplot(plot_data_width, aes(x = fct_relevel(combination,
+                                                                  "Antibiotic_Drought", 
+                                                                  "Antibiotic_Herbicide", 
+                                                                  "Antibiotic_MP",
+                                                                  "Drought_Herbicide", 
+                                                                  "Drought_MP", 
+                                                                  "Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide", 
+                                                                  "Antibiotic_Drought_MP", 
+                                                                  "Antibiotic_Herbicide_MP", 
+                                                                  "Drought_Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide_MP"),
+                                                          y = effect_size, color = classification)) +
+  geom_hline(yintercept = 0, color = "black", size = 1, linetype = "dashed") +
+  geom_point(size = 3, alpha = 0.9) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.2, alpha = 0.9) +
+  coord_flip() +
+  scale_color_manual(values = c("Antagonistic" = "#4363d8", "Synergistic" = "#e6194B", 
+                               "Null" = "gray50")) +
+  labs(x = "Stress Treatment",
+       title = "Max. Width",
+       color = "Interaction") + 
+  theme(axis.title.y = element_blank(), 
+        axis.text.y = element_blank(), 
+        axis.title.x = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_width_multi_effects.svg", root_width_multi_effects)
+```
+
+## Volume ## 
+#### Calculating the multiplicative model estimates and effect sizes
+```{r}
+analyze_all_combos_volume <- function(mse1) {
+  
+  # extract all treatment summaries
+  treatment_summaries <- mse1 %>% 
+    group_by(Stress_ID) %>% 
+    summarize( 
+      mean_volume = mean(Volume.mm3, na.rm = TRUE), 
+      sd_volume = sd(Volume.mm3, na.rm = TRUE), 
+      n = n(), 
+      .groups = "drop")
+  # define all combinations to test 
+  combinations <- list(
+    #pairwise 
+    list(singles = c("MP", "Drought"), combo = "Drought_MP"), 
+    list(singles = c("MP", "Herbicide"), combo = "Herbicide_MP"), 
+    list(singles = c("MP", "Antibiotic"), combo = "Antibiotic_MP"), 
+    list(singles = c("Drought", "Herbicide"), combo = "Drought_Herbicide"),
+    list(singles = c("Drought", "Antibiotic"), combo = "Antibiotic_Drought"),
+    list(singles = c("Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide"),
+    #three-way 
+    list(singles = c("MP", "Drought", "Herbicide"), combo = "Drought_Herbicide_MP"), 
+    list(singles = c("MP", "Drought", "Antibiotic"), combo = "Antibiotic_Drought_MP"), 
+    list(singles = c("MP", "Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide_MP"), 
+    list(singles = c("Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide"),
+    #four-way 
+    list(singles = c("MP", "Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide_MP")
+  )
+  calculate_effect_size_volume <- function(combo_info, summaries) {
+    control <- summaries %>% filter(Stress_ID == "Control")
+    combo_data_volume <- summaries %>% filter(Stress_ID == combo_info$combo)
+    
+    if(nrow(control) == 0 | nrow(combo_data_volume) == 0) return(NULL)
+    
+    # get single stressor data 
+    single_data <- map_dfr(combo_info$singles, ~{
+      summaries %>% filter(Stress_ID == .x)
+    })
+    
+    if(nrow(single_data) == 0) return(NULL)
+    
+    # multiplicative expectation 
+    single_means <- single_data$mean_volume
+    Xc <-  control$mean_volume
+    X_obs <- combo_data_volume$mean_volume
+    
+    X_exp <- prod(single_means) / Xc^(length(single_means) -1)
+    
+    # simple effect size 
+    ES <- log(X_obs) - log(X_exp)
+    
+    # VARIANCE using delta method (all treatments contribute)
+  k <- length(single_means)  # number of single stressors
+  
+  var_ES <- (
+    combo_data_volume$sd_volume^2 / (combo_data_volume$n * X_obs^2) +           # Observed combo
+    sum(single_data$sd_volume^2 / (single_data$n * single_data$mean_volume^2)) +  # Singles
+    (k - 1) * (control$sd_volume^2 / (control$n * Xc^2))          # Control (raised to k-1)
+  )
+  
+  SE <- sqrt(var_ES)
+  CI_lower <- ES - 1.96 * SE
+  CI_upper <- ES + 1.96 * SE
+  
+  # Classification
+  classification <- case_when(
+    CI_lower > 0 ~ "Synergistic",
+    CI_upper < 0 ~ "Antagonistic",
+    CI_lower <= 0 & CI_upper >= 0 ~ "Null",
+    TRUE ~ "Reversal"
+  )
+  
+    data.frame(
+      combination = combo_info$combo,
+      singles_used = paste(combo_info$singles, collapse = "_"), 
+      observed = X_obs, 
+      expected = X_exp, 
+      effect_size = ES, 
+      SE = SE, 
+      CI_lower = CI_lower, 
+      CI_upper = CI_upper,
+      classification = classification,
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # apply to all combos 
+  results_volume <- map_dfr(combinations, ~calculate_effect_size_volume(.x, treatment_summaries))
+  return(results_volume)
+} 
+
+# run it 
+results_volume <- analyze_all_combos_volume(mse1)
+print(results_volume)
+```
+
+#### Plotting effect sizes 
+```{r}
+plot_data_volume <- results_volume %>%
+  mutate(n_stressors = str_count(singles_used, "_") + 2)
+
+root_volume_multi_effects <- ggplot(plot_data_volume, aes(x = fct_relevel(combination,
+                                                                  "Antibiotic_Drought", 
+                                                                  "Antibiotic_Herbicide", 
+                                                                  "Antibiotic_MP",
+                                                                  "Drought_Herbicide", 
+                                                                  "Drought_MP", 
+                                                                  "Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide", 
+                                                                  "Antibiotic_Drought_MP", 
+                                                                  "Antibiotic_Herbicide_MP", 
+                                                                  "Drought_Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide_MP"),
+                                                          y = effect_size, color = classification)) +
+  geom_hline(yintercept = 0, color = "black", size = 1, linetype = "dashed") +
+  geom_point(size = 3, alpha = 0.9) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.2, alpha = 0.9) +
+  coord_flip() +
+  scale_color_manual(values = c("Antagonistic" = "#4363d8", "Synergistic" = "#e6194B", 
+                               "Null" = "gray50")) +
+  labs(x = "Stress Treatment",
+       title = "Volume",
+       color = "Interaction") +
+  theme(axis.title.y = element_blank(), 
+        axis.text.y = element_blank(), 
+        axis.title.x = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_volume_multi_effects.svg", root_volume_multi_effects)
+```
+
+## Width-to-depth ratio ## 
+#### Calculating the multiplicative model estimates and effect sizes
+```{r}
+analyze_all_combos_wtd <- function(mse1) {
+  
+  # extract all treatment summaries
+  treatment_summaries <- mse1 %>% 
+    group_by(Stress_ID) %>% 
+    summarize( 
+      mean_wtd = mean(`Width-to-Depth.Ratio`, na.rm = TRUE), 
+      sd_wtd = sd(`Width-to-Depth.Ratio`, na.rm = TRUE), 
+      n = n(), 
+      .groups = "drop")
+  # define all combinations to test 
+  combinations <- list(
+    #pairwise 
+    list(singles = c("MP", "Drought"), combo = "Drought_MP"), 
+    list(singles = c("MP", "Herbicide"), combo = "Herbicide_MP"), 
+    list(singles = c("MP", "Antibiotic"), combo = "Antibiotic_MP"), 
+    list(singles = c("Drought", "Herbicide"), combo = "Drought_Herbicide"),
+    list(singles = c("Drought", "Antibiotic"), combo = "Antibiotic_Drought"),
+    list(singles = c("Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide"),
+    #three-way 
+    list(singles = c("MP", "Drought", "Herbicide"), combo = "Drought_Herbicide_MP"), 
+    list(singles = c("MP", "Drought", "Antibiotic"), combo = "Antibiotic_Drought_MP"), 
+    list(singles = c("MP", "Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide_MP"), 
+    list(singles = c("Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide"),
+    #four-way 
+    list(singles = c("MP", "Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide_MP")
+  )
+  calculate_effect_size_wtd <- function(combo_info, summaries) {
+    control <- summaries %>% filter(Stress_ID == "Control")
+    combo_data_wtd <- summaries %>% filter(Stress_ID == combo_info$combo)
+    
+    if(nrow(control) == 0 | nrow(combo_data_wtd) == 0) return(NULL)
+    
+    # get single stressor data 
+    single_data <- map_dfr(combo_info$singles, ~{
+      summaries %>% filter(Stress_ID == .x)
+    })
+    
+    if(nrow(single_data) == 0) return(NULL)
+    
+    # multiplicative expectation 
+    single_means <- single_data$mean_wtd
+    Xc <-  control$mean_wtd
+    X_obs <- combo_data_wtd$mean_wtd
+    
+    X_exp <- prod(single_means) / Xc^(length(single_means) -1)
+    
+    # simple effect size 
+    ES <- log(X_obs) - log(X_exp)
+    
+    # VARIANCE using delta method (all treatments contribute)
+  k <- length(single_means)  # number of single stressors
+  
+  var_ES <- (
+    combo_data_wtd$sd_wtd^2 / (combo_data_wtd$n * X_obs^2) +           # Observed combo
+    sum(single_data$sd_wtd^2 / (single_data$n * single_data$mean_wtd^2)) +  # Singles
+    (k - 1) * (control$sd_wtd^2 / (control$n * Xc^2))          # Control (raised to k-1)
+  )
+  
+  SE <- sqrt(var_ES)
+  CI_lower <- ES - 1.96 * SE
+  CI_upper <- ES + 1.96 * SE
+  
+  # Classification
+  classification <- case_when(
+    CI_lower > 0 ~ "Synergistic",
+    CI_upper < 0 ~ "Antagonistic",
+    CI_lower <= 0 & CI_upper >= 0 ~ "Null",
+    TRUE ~ "Reversal"
+  )
+  
+    data.frame(
+      combination = combo_info$combo,
+      singles_used = paste(combo_info$singles, collapse = "_"), 
+      observed = X_obs, 
+      expected = X_exp, 
+      effect_size = ES, 
+      SE = SE, 
+      CI_lower = CI_lower, 
+      CI_upper = CI_upper,
+      classification = classification,
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # apply to all combos 
+  results_wtd <- map_dfr(combinations, ~calculate_effect_size_wtd(.x, treatment_summaries))
+  return(results_wtd)
+} 
+
+# run it 
+results_wtd <- analyze_all_combos_wtd(mse1)
+print(results_wtd)
+```
+
+#### Plotting effect sizes 
+```{r}
+plot_data_wtd <- results_volume %>%
+  mutate(n_stressors = str_count(singles_used, "_") + 2)
+
+root_wtd_multi_effects <- ggplot(plot_data_wtd, aes(x = fct_relevel(combination,
+                                                                  "Antibiotic_Drought", 
+                                                                  "Antibiotic_Herbicide", 
+                                                                  "Antibiotic_MP",
+                                                                  "Drought_Herbicide", 
+                                                                  "Drought_MP", 
+                                                                  "Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide", 
+                                                                  "Antibiotic_Drought_MP", 
+                                                                  "Antibiotic_Herbicide_MP", 
+                                                                  "Drought_Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide_MP"),
+                                                          y = effect_size, color = classification)) +
+  geom_hline(yintercept = 0, color = "black", size = 1, linetype = "dashed") +
+  geom_point(size = 3, alpha = 0.9) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.2, alpha = 0.9) +
+  coord_flip() +
+  scale_color_manual(values = c("Antagonistic" = "#4363d8", "Synergistic" = "#e6194B", 
+                               "Null" = "gray50")) +
+  labs(x = "Stress Treatment", y = "Effect Size (95% CI)",
+       title = "Width:Depth",
+       color = "Interaction") + 
+  theme(plot.title = element_text(hjust = 0.5))
+#+ theme(axis.title.y = element_blank(), 
+#        axis.text.y = element_blank())
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_width_to_depth_multi_effects.svg", root_wtd_multi_effects)
+```
+
+## Convex Area ## 
+#### Calculating the multiplicative model estimates and effect sizes
+```{r}
+analyze_all_combos_convex <- function(mse1) {
+  
+  # extract all treatment summaries
+  treatment_summaries <- mse1 %>% 
+    group_by(Stress_ID) %>% 
+    summarize( 
+      mean_convex = mean(Convex.Area.mm2, na.rm = TRUE), 
+      sd_convex = sd(Convex.Area.mm2, na.rm = TRUE), 
+      n = n(), 
+      .groups = "drop")
+  # define all combinations to test 
+  combinations <- list(
+    #pairwise 
+    list(singles = c("MP", "Drought"), combo = "Drought_MP"), 
+    list(singles = c("MP", "Herbicide"), combo = "Herbicide_MP"), 
+    list(singles = c("MP", "Antibiotic"), combo = "Antibiotic_MP"), 
+    list(singles = c("Drought", "Herbicide"), combo = "Drought_Herbicide"),
+    list(singles = c("Drought", "Antibiotic"), combo = "Antibiotic_Drought"),
+    list(singles = c("Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide"),
+    #three-way 
+    list(singles = c("MP", "Drought", "Herbicide"), combo = "Drought_Herbicide_MP"), 
+    list(singles = c("MP", "Drought", "Antibiotic"), combo = "Antibiotic_Drought_MP"), 
+    list(singles = c("MP", "Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide_MP"), 
+    list(singles = c("Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide"),
+    #four-way 
+    list(singles = c("MP", "Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide_MP")
+  )
+  calculate_effect_size_convex <- function(combo_info, summaries) {
+    control <- summaries %>% filter(Stress_ID == "Control")
+    combo_data_convex <- summaries %>% filter(Stress_ID == combo_info$combo)
+    
+    if(nrow(control) == 0 | nrow(combo_data_convex) == 0) return(NULL)
+    
+    # get single stressor data 
+    single_data <- map_dfr(combo_info$singles, ~{
+      summaries %>% filter(Stress_ID == .x)
+    })
+    
+    if(nrow(single_data) == 0) return(NULL)
+    
+    # multiplicative expectation 
+    single_means <- single_data$mean_convex
+    Xc <-  control$mean_convex
+    X_obs <- combo_data_convex$mean_convex
+    
+    X_exp <- prod(single_means) / Xc^(length(single_means) -1)
+    
+    # simple effect size 
+    ES <- log(X_obs) - log(X_exp)
+    
+    # VARIANCE using delta method (all treatments contribute)
+  k <- length(single_means)  # number of single stressors
+  
+  var_ES <- (
+    combo_data_convex$sd_convex^2 / (combo_data_convex$n * X_obs^2) +           # Observed combo
+    sum(single_data$sd_convex^2 / (single_data$n * single_data$mean_convex^2)) +  # Singles
+    (k - 1) * (control$sd_convex^2 / (control$n * Xc^2))          # Control (raised to k-1)
+  )
+  
+  SE <- sqrt(var_ES)
+  CI_lower <- ES - 1.96 * SE
+  CI_upper <- ES + 1.96 * SE
+  
+  # Classification
+  classification <- case_when(
+    CI_lower > 0 ~ "Synergistic",
+    CI_upper < 0 ~ "Antagonistic",
+    CI_lower <= 0 & CI_upper >= 0 ~ "Null",
+    TRUE ~ "Reversal"
+  )
+  
+    data.frame(
+      combination = combo_info$combo,
+      singles_used = paste(combo_info$singles, collapse = "_"), 
+      observed = X_obs, 
+      expected = X_exp, 
+      effect_size = ES, 
+      SE = SE, 
+      CI_lower = CI_lower, 
+      CI_upper = CI_upper,
+      classification = classification,
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # apply to all combos 
+  results_convex <- map_dfr(combinations, ~calculate_effect_size_convex(.x, treatment_summaries))
+  return(results_convex)
+} 
+
+# run it 
+results_convex <- analyze_all_combos_convex(mse1)
+print(results_convex)
+```
+
+#### Plotting effect sizes 
+```{r}
+plot_data_convex <- results_convex %>%
+  mutate(n_stressors = str_count(singles_used, "_") + 2)
+
+root_convex_multi_effects <- ggplot(plot_data_convex, aes(x = fct_relevel(combination,
+                                                                  "Antibiotic_Drought", 
+                                                                  "Antibiotic_Herbicide", 
+                                                                  "Antibiotic_MP",
+                                                                  "Drought_Herbicide", 
+                                                                  "Drought_MP", 
+                                                                  "Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide", 
+                                                                  "Antibiotic_Drought_MP", 
+                                                                  "Antibiotic_Herbicide_MP", 
+                                                                  "Drought_Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide_MP"),
+                                                          y = effect_size, color = classification)) +
+  geom_hline(yintercept = 0, color = "black", size = 1, linetype = "dashed") +
+  geom_point(size = 3, alpha = 0.9) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.2, alpha = 0.9) +
+  coord_flip() +
+  scale_color_manual(values = c("Antagonistic" = "#4363d8", "Synergistic" = "#e6194B", 
+                               "Null" = "gray50")) +
+  labs(x = "Stress Treatment", y = "Effect Size (95% CI)",
+       title = "Convex Area",
+       color = "Interaction") +
+  theme(axis.title.y = element_blank(), 
+        axis.text.y = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_convex_multi_effects.svg", root_convex_multi_effects)
+```
+
+## Maximum Diameter ## 
+#### Calculating the multiplicative model estimates and effect sizes
+```{r}
+analyze_all_combos_maxdiameter <- function(mse1) {
+  
+  # extract all treatment summaries
+  treatment_summaries <- mse1 %>% 
+    group_by(Stress_ID) %>% 
+    summarize( 
+      mean_maxdiameter = mean(Maximum.Diameter.mm, na.rm = TRUE), 
+      sd_maxdiameter = sd(Maximum.Diameter.mm, na.rm = TRUE), 
+      n = n(), 
+      .groups = "drop")
+  # define all combinations to test 
+  combinations <- list(
+    #pairwise 
+    list(singles = c("MP", "Drought"), combo = "Drought_MP"), 
+    list(singles = c("MP", "Herbicide"), combo = "Herbicide_MP"), 
+    list(singles = c("MP", "Antibiotic"), combo = "Antibiotic_MP"), 
+    list(singles = c("Drought", "Herbicide"), combo = "Drought_Herbicide"),
+    list(singles = c("Drought", "Antibiotic"), combo = "Antibiotic_Drought"),
+    list(singles = c("Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide"),
+    #three-way 
+    list(singles = c("MP", "Drought", "Herbicide"), combo = "Drought_Herbicide_MP"), 
+    list(singles = c("MP", "Drought", "Antibiotic"), combo = "Antibiotic_Drought_MP"), 
+    list(singles = c("MP", "Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide_MP"), 
+    list(singles = c("Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide"),
+    #four-way 
+    list(singles = c("MP", "Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide_MP")
+  )
+  calculate_effect_size_maxdiameter <- function(combo_info, summaries) {
+    control <- summaries %>% filter(Stress_ID == "Control")
+    combo_data_maxdiameter <- summaries %>% filter(Stress_ID == combo_info$combo)
+    
+    if(nrow(control) == 0 | nrow(combo_data_maxdiameter) == 0) return(NULL)
+    
+    # get single stressor data 
+    single_data <- map_dfr(combo_info$singles, ~{
+      summaries %>% filter(Stress_ID == .x)
+    })
+    
+    if(nrow(single_data) == 0) return(NULL)
+    
+    # multiplicative expectation 
+    single_means <- single_data$mean_maxdiameter
+    Xc <-  control$mean_maxdiameter
+    X_obs <- combo_data_maxdiameter$mean_maxdiameter
+    
+    X_exp <- prod(single_means) / Xc^(length(single_means) -1)
+    
+    # simple effect size 
+    ES <- log(X_obs) - log(X_exp)
+    
+    # VARIANCE using delta method (all treatments contribute)
+  k <- length(single_means)  # number of single stressors
+  
+  var_ES <- (
+    combo_data_maxdiameter$sd_maxdiameter^2 / (combo_data_maxdiameter$n * X_obs^2) +           # Observed combo
+    sum(single_data$sd_maxdiameter^2 / (single_data$n * single_data$mean_maxdiameter^2)) +  # Singles
+    (k - 1) * (control$sd_maxdiameter^2 / (control$n * Xc^2))          # Control (raised to k-1)
+  )
+  
+  SE <- sqrt(var_ES)
+  CI_lower <- ES - 1.96 * SE
+  CI_upper <- ES + 1.96 * SE
+  
+  # Classification
+  classification <- case_when(
+    CI_lower > 0 ~ "Synergistic",
+    CI_upper < 0 ~ "Antagonistic",
+    CI_lower <= 0 & CI_upper >= 0 ~ "Null",
+    TRUE ~ "Reversal"
+  )
+  
+    data.frame(
+      combination = combo_info$combo,
+      singles_used = paste(combo_info$singles, collapse = "_"), 
+      observed = X_obs, 
+      expected = X_exp, 
+      effect_size = ES, 
+      SE = SE, 
+      CI_lower = CI_lower, 
+      CI_upper = CI_upper,
+      classification = classification,
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # apply to all combos 
+  results_maxdiameter <- map_dfr(combinations, ~calculate_effect_size_maxdiameter(.x, treatment_summaries))
+  return(results_maxdiameter)
+} 
+
+# run it 
+results_maxdiameter <- analyze_all_combos_maxdiameter(mse1)
+print(results_maxdiameter)
+```
+
+#### Plotting effect sizes 
+```{r}
+plot_data_maxdiameter <- results_maxdiameter %>%
+  mutate(n_stressors = str_count(singles_used, "_") + 2)
+
+root_maxdiameter_multi_effects <- ggplot(plot_data_maxdiameter, aes(x = fct_relevel(combination,
+                                                                  "Antibiotic_Drought", 
+                                                                  "Antibiotic_Herbicide", 
+                                                                  "Antibiotic_MP",
+                                                                  "Drought_Herbicide", 
+                                                                  "Drought_MP", 
+                                                                  "Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide", 
+                                                                  "Antibiotic_Drought_MP", 
+                                                                  "Antibiotic_Herbicide_MP", 
+                                                                  "Drought_Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide_MP"),
+                                                          y = effect_size, color = classification)) +
+  geom_hline(yintercept = 0, color = "black", size = 1, linetype = "dashed") +
+  geom_point(size = 3, alpha = 0.9) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.2, alpha = 0.9) +
+  coord_flip() +
+  scale_color_manual(values = c("Antagonistic" = "#4363d8", "Synergistic" = "#e6194B", 
+                               "Null" = "gray50")) +
+  labs(x = "Stress Treatment",
+       title = "Max. Diameter",
+       color = "Interaction") +
+  theme(axis.title.y = element_blank(), 
+        axis.text.y = element_blank(), 
+        axis.title.x = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_maxdiameter_multi_effects.svg", root_maxdiameter_multi_effects)
+```
+
+## Medium Angle Frequency ## 
+#### Calculating the multiplicative model estimates and effect sizes
+```{r}
+analyze_all_combos_medangle <- function(mse1) {
+  
+  # extract all treatment summaries
+  treatment_summaries <- mse1 %>% 
+    group_by(Stress_ID) %>% 
+    summarize( 
+      mean_medangle = mean(Medium.Angle.Frequency, na.rm = TRUE), 
+      sd_medangle = sd(Medium.Angle.Frequency, na.rm = TRUE), 
+      n = n(), 
+      .groups = "drop")
+  # define all combinations to test 
+  combinations <- list(
+    #pairwise 
+    list(singles = c("MP", "Drought"), combo = "Drought_MP"), 
+    list(singles = c("MP", "Herbicide"), combo = "Herbicide_MP"), 
+    list(singles = c("MP", "Antibiotic"), combo = "Antibiotic_MP"), 
+    list(singles = c("Drought", "Herbicide"), combo = "Drought_Herbicide"),
+    list(singles = c("Drought", "Antibiotic"), combo = "Antibiotic_Drought"),
+    list(singles = c("Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide"),
+    #three-way 
+    list(singles = c("MP", "Drought", "Herbicide"), combo = "Drought_Herbicide_MP"), 
+    list(singles = c("MP", "Drought", "Antibiotic"), combo = "Antibiotic_Drought_MP"), 
+    list(singles = c("MP", "Herbicide", "Antibiotic"), combo = "Antibiotic_Herbicide_MP"), 
+    list(singles = c("Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide"),
+    #four-way 
+    list(singles = c("MP", "Drought", "Herbicide", "Antibiotic"), combo = "Antibiotic_Drought_Herbicide_MP")
+  )
+  calculate_effect_size_medangle <- function(combo_info, summaries) {
+    control <- summaries %>% filter(Stress_ID == "Control")
+    combo_data_medangle <- summaries %>% filter(Stress_ID == combo_info$combo)
+    
+    if(nrow(control) == 0 | nrow(combo_data_medangle) == 0) return(NULL)
+    
+    # get single stressor data 
+    single_data <- map_dfr(combo_info$singles, ~{
+      summaries %>% filter(Stress_ID == .x)
+    })
+    
+    if(nrow(single_data) == 0) return(NULL)
+    
+    # multiplicative expectation 
+    single_means <- single_data$mean_medangle
+    Xc <-  control$mean_medangle
+    X_obs <- combo_data_medangle$mean_medangle
+    
+    X_exp <- prod(single_means) / Xc^(length(single_means) -1)
+    
+    # simple effect size 
+    ES <- log(X_obs) - log(X_exp)
+    
+    # VARIANCE using delta method (all treatments contribute)
+  k <- length(single_means)  # number of single stressors
+  
+  var_ES <- (
+    combo_data_medangle$sd_medangle^2 / (combo_data_medangle$n * X_obs^2) +           # Observed combo
+    sum(single_data$sd_medangle^2 / (single_data$n * single_data$mean_medangle^2)) +  # Singles
+    (k - 1) * (control$sd_medangle^2 / (control$n * Xc^2))          # Control (raised to k-1)
+  )
+  
+  SE <- sqrt(var_ES)
+  CI_lower <- ES - 1.96 * SE
+  CI_upper <- ES + 1.96 * SE
+  
+  # Classification
+  classification <- case_when(
+    CI_lower > 0 ~ "Synergistic",
+    CI_upper < 0 ~ "Antagonistic",
+    CI_lower <= 0 & CI_upper >= 0 ~ "Null",
+    TRUE ~ "Reversal"
+  )
+  
+    data.frame(
+      combination = combo_info$combo,
+      singles_used = paste(combo_info$singles, collapse = "_"), 
+      observed = X_obs, 
+      expected = X_exp, 
+      effect_size = ES, 
+      SE = SE, 
+      CI_lower = CI_lower, 
+      CI_upper = CI_upper,
+      classification = classification,
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  # apply to all combos 
+  results_medangle <- map_dfr(combinations, ~calculate_effect_size_medangle(.x, treatment_summaries))
+  return(results_medangle)
+} 
+
+# run it 
+results_medangle <- analyze_all_combos_medangle(mse1)
+print(results_medangle)
+```
+
+#### Plotting effect sizes 
+```{r}
+plot_data_medangle <- results_medangle %>%
+  mutate(n_stressors = str_count(singles_used, "_") + 2)
+
+root_medangle_multi_effects <- ggplot(plot_data_medangle, aes(x = fct_relevel(combination,
+                                                                  "Antibiotic_Drought", 
+                                                                  "Antibiotic_Herbicide", 
+                                                                  "Antibiotic_MP",
+                                                                  "Drought_Herbicide", 
+                                                                  "Drought_MP", 
+                                                                  "Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide", 
+                                                                  "Antibiotic_Drought_MP", 
+                                                                  "Antibiotic_Herbicide_MP", 
+                                                                  "Drought_Herbicide_MP", 
+                                                                  "Antibiotic_Drought_Herbicide_MP"),
+                                                          y = effect_size, color = classification)) +
+  geom_hline(yintercept = 0, color = "black", size = 1, linetype = "dashed") +
+  geom_point(size = 3, alpha = 0.9) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.2, alpha = 0.9) +
+  coord_flip() +
+  scale_color_manual(values = c("Antagonistic" = "#4363d8", "Synergistic" = "#e6194B", 
+                               "Null" = "gray50")) +
+  labs(x = "Stress Treatment",
+       title = "Medium Angle Freq.",
+       color = "Interaction") +
+  theme(axis.title.y = element_blank(), 
+        axis.text.y = element_blank(), 
+        axis.title.x = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_medangle_multi_effects.svg", root_medangle_multi_effects)
+```
+
+# Conclusions 
+```{r}
+# combining data frames so I can see how many of each interaction classification per response variable in one plot 
+df_list <- list(results, results_rbiomass, results_depth, results_diameter, results_tips, results_length, results_maxdiameter, results_maxroots, results_convex, results_medangle, 
+                results_orientation, results_volume, results_width, results_wtd) 
+names(df_list) <- c("shoot_biomass", "root_biomass", "root_depth", "root_average_diameter", "root_tips", "total_root_length", "root_maximum_diameter", 
+                    "maximum_number_of_roots", "root_convex_area", "root_medium_angle_frequency", "average_root_orientation", "root_volume", "root_width",
+                    "root_width_to_depth_ratio")
+
+combined_df <- bind_rows(df_list, .id = "Response")
+
+# Define a custom order of treatments for the x axis 
+treatment_order <- factor(c("Control", "MP", "Drought", "Herbicide", "Antibiotic",
+                          "Drought_MP", "Herbicide_MP", "Antibiotic_MP", 
+                          "Drought_Herbicide", "Antibiotic_Drought", "Antibiotic_Herbicide",
+                          "Drought_Herbicide_MP", "Antibiotic_Drought_MP", 
+                          "Antibiotic_Herbicide_MP", "Antibiotic_Drought_Herbicide", 
+                          "Antibiotic_Drought_Herbicide_MP"), 
+                         levels = c("Control", "MP", "Drought", "Herbicide", "Antibiotic",
+                                   "Drought_MP", "Herbicide_MP", "Antibiotic_MP", 
+                                   "Drought_Herbicide", "Antibiotic_Drought", "Antibiotic_Herbicide",
+                                   "Drought_Herbicide_MP", "Antibiotic_Drought_MP", 
+                                   "Antibiotic_Herbicide_MP", "Antibiotic_Drought_Herbicide", 
+                                  "Antibiotic_Drought_Herbicide_MP"))
+
+combined_df$combination <- factor(combined_df$combination, levels = levels(treatment_order))
+
+# separate by category of response variable 
+## (i.e., root + shoot biomass = Biomass; length, tips, surface area, diameter, & depth = Root Architecture)
+
+# add a category column to the df 
+combined_df <- combined_df %>% 
+  mutate(Category = case_when(
+    Response %in% c("shoot_biomass", "root_biomass") ~ "Biomass", 
+    Response %in% c("root_depth", "root_average_diameter", "root_tips", "total_root_length", "root_maximum_diameter", 
+                    "maximum_number_of_roots", "root_convex_area", "root_medium_angle_frequency", "average_root_orientation", "root_volume", "root_width",
+                    "root_width_to_depth_ratio") ~ "Root Architecture"
+  ))
+
+# subsetting the dataframe to separate biomass from architecture 
+biomass_df <- combined_df %>% 
+  filter(Response %in% c("shoot_biomass", "root_biomass"))
+
+architecture_df <- combined_df %>% 
+  filter(Response %in% c("root_tips", "root_depth", "root_average_diameter", "root_maximum_diameter", "total_root_length",
+                    "root_medium_angle_frequency", "root_volume", "root_width", "root_width_to_depth_ratio", "average_root_orientation",
+                    "root_convex_area", "maximum_number_of_roots"))
+
+# now plot separately 
+p_biomass <- ggplot(biomass_df, aes(x = Response, fill = classification)) + 
+  geom_bar(position = "fill") + 
+  labs(x = "Response", y = "Proportion of Interactions", 
+       fill = "Interaction Type") + 
+  scale_fill_manual(values = c("Antagonistic" = "#4363d8", 
+                              "Synergistic" = "#e6194B", 
+                              "Null" = "gray50")) + 
+  scale_x_discrete(labels = c("Root Biomass", "Shoot Biomass")) + 
+  theme(axis.text.x = element_text(angle =45, hjust =1))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/prop_biomass_classifications.svg", p_biomass, height = 4, width = 3)
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/prop_biomass_classification.pdf", p_biomass, height = 4, width = 3)
+
+p_arch <- ggplot(architecture_df, aes(x = Response, fill = classification)) + 
+  geom_bar(position = "fill") + 
+  labs(x = "Response", y = "Proportion of Interactions", 
+       fill = "Interaction Type") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  scale_fill_manual(values = c("Antagonistic" = "#4363d8", 
+                              "Synergistic" = "#e6194B", 
+                              "Null" = "gray50")) + 
+  scale_x_discrete(labels = c("Avg. Root Orientation", "Max. Number of Roots", "Avg. Diameter", 
+                              "Convex Area", "Depth", "Max. Diameter", "Medium Angle Freq.", "Number of Tips", 
+                              "Volume", "Max. Width", "Width:Depth", "Total Root Length"
+  ))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/prop_architecture_classifications.svg", p_arch, width = 6, height = 4)
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/prop_architecture_classifications.pdf", p_arch, width = 6, height =4)
+
+# plot stress ID by biomass and arch 
+p_biomass_stress <- ggplot(biomass_df, aes(x = combination, fill = classification)) + 
+  geom_bar(position = "fill") + 
+  labs(x = "Stress Treatment", y = "Proportion of Interactions", fill = "Interaction Type") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  scale_fill_manual(values = c("Antagonistic" = "#4363d8", 
+                               "Synergistic" = "#e6194B", 
+                               "Null" = "gray50")) + 
+  scale_x_discrete(labels = c("Drought + MP", "Herbicide + MP", "Antibiotic + MP", 
+                              "Drought + Herbicide", "Antibiotic + Drought", "Antibiotic + Herbicide", 
+                              "Drought + Herbicide + MP", "Antibiotic + Drought + MP", 
+                              "Antibiotic + Herbicide + MP", "Antibiotic + Drought + Herbicide", 
+                              "Antibiotic + Drought + Herbicide + MP"))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/prop_biomass_by_stress.svg", p_biomass_stress, width = 5, height = 4)
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/prop_biomass_by_stress.pdf", p_biomass_stress, width = 5, height = 4)
+
+p_arch_stress <- ggplot(architecture_df, aes(x = combination, fill = classification)) + 
+  geom_bar(position = "fill") + 
+  labs(x = "Stress Treatment", y = "Proportion of Interactions", fill = "Interaction Type") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  scale_fill_manual(values = c("Antagonistic" = "#4363d8", 
+                               "Synergistic" = "#e6194B", 
+                               "Null" = "gray50")) + 
+    scale_x_discrete(labels = c("Drought + MP", "Herbicide + MP", "Antibiotic + MP", 
+                              "Drought + Herbicide", "Antibiotic + Drought", "Antibiotic + Herbicide", 
+                              "Drought + Herbicide + MP", "Antibiotic + Drought + MP", 
+                              "Antibiotic + Herbicide + MP", "Antibiotic + Drought + Herbicide", 
+                              "Antibiotic + Drought + Herbicide + MP"))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/prop_arch_by_stress.svg", p_arch_stress, width = 5, height = 4)
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/prop_arch_by_stress.pdf", p_arch_stress, width = 5, height = 4)
+```
+
+
+```{r}
+# combining the root architecture effect size plots 
+arch_eff_size_fig <- ggarrange(root_tips_multi_effects, root_depth_multiplicative_effects,
+                              root_diameter_multi_effects, root_maxdiameter_multi_effects,
+                              root_length_multi_effects,
+                              root_medangle_multi_effects, root_volume_multi_effects, 
+                              root_width_multi_effects, root_wtd_multi_effects,
+                              root_orientation_multi_effects, 
+                              root_convex_multi_effects, max_root_multi_effects,
+                              ncol = 4, nrow = 3, 
+                              common.legend = TRUE, 
+                              align = "hv")
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/arch_eff_size_full_fig.svg", arch_eff_size_fig, width = 18, height = 14)
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/arch_eff_size_full_fig.pdf", arch_eff_size_fig, width = 18, height = 14)
+```
