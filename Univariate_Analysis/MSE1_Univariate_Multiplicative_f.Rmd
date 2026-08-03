@@ -36,7 +36,7 @@ theme_set(theme_bw())
 
 ```{r}
 # Load and prep data 
-x <- read_xlsx("~/Desktop/FDA_Lab/Experiment1/manuscript/data/FINAL_METADATA_SHEET.xlsx")
+x <- read_xlsx("~/MSE1_metadata.xlsx")
 
 # remove sample IDs 59 and 114 because they did not survive the experiment and there is no data associated with them 
 y <- x %>% filter(ID !=59)
@@ -184,8 +184,6 @@ shoot_bio_multi_effects <- ggplot(plot_data, aes(x = reorder(combination, n_stre
   labs(x = "Stress Treatment", y = "Effect Size (95% CI)",
        title = "Shoot Biomass",
        color = "Interaction Type")
-
-#ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/shoot_bio_multiplicative_effect_sizes.svg", shoot_bio_multi_effects)
 ```
 
 #### Plotting raw data 
@@ -226,8 +224,7 @@ shoot_biomass_boxplot <- ggplot(mse1_clean, aes(x = Stress_ID, y = Shoot_Biomass
   labs(y = "Shoot Biomass", x = "Treatment") + 
   theme(legend.position = "none")
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/shoot_biomass_boxplot.png", shoot_biomass_boxplot)
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/shoot_biomass_boxplot.pdf", shoot_biomass_boxplot)
+ggsave("~/shoot_biomass_boxplot.pdf", shoot_biomass_boxplot)
 ```
 ## Root Biomass ##
 #### Calculating the multiplicative null model estimates and effect sizes
@@ -341,8 +338,6 @@ root_bio_multiplicative_effects <- ggplot(plot_data_rbiomass, aes(x = reorder(co
   labs(x = "Stress Treatment", y = "Effect Size (95% CI)",
        title = "Root Biomass",
        color = "Interaction")
-
-#ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_bio_multiplicative_effects.svg", root_bio_multiplicative_effects)
 ```
 
 #### Plotting raw data 
@@ -380,8 +375,7 @@ root_biomass_boxplot <- ggplot(mse1_clean, aes(x = Stress_ID, y = Root_Biomass, 
   labs(y = "Root Biomass", x = "Treatment") + 
   theme(legend.position = "none")
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_biomass_boxplot.png", root_biomass_boxplot)
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_biomass_boxplot.pdf", root_biomass_boxplot)
+ggsave("~/root_biomass_boxplot.pdf", root_biomass_boxplot)
 ```
 
 
@@ -441,15 +435,14 @@ biomass_eff_size_fig <- ggarrange(shoot_bio_multi_effects, root_bio_multiplicati
                                   ncol = 1, nrow = 2, 
                                   common.legend = TRUE, legend = "right", 
                                   align = "hv")
-
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/biomass_multi_eff_size_fig.png", biomass_eff_size_fig, width = 10, height = 14)
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/biomass_multi_eff_size_fig.pdf", biomass_eff_size_fig, width = 10, height = 14)
+)
+ggsave("~/biomass_multi_eff_size_fig.pdf", biomass_eff_size_fig, width = 10, height = 14)
 ```
 
 # Root Architecture #
 ## Checking for correlations among root architecutre traits ## 
 ```{r}
-# Choose only the variables you want to test the linear correlations with 
+# Choose only the variables we want to test the linear correlations with 
 vars <- c("Median.Number.of.Roots", "Maximum.Number.of.Roots", "Number.of.Root.Tips", 
           "Total.Root.Length.mm", "Depth.mm", "Maximum.Width.mm", "Width-to-Depth.Ratio", 
           "Network.Area.mm2", "Convex.Area.mm2", "Solidity", "Lower.Root.Area.mm2", 
@@ -494,8 +487,7 @@ root_arch_corr <- ggplot(r2_long, aes(x = var2, y = var1, fill = r2)) +
     axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)
   )
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_arch_corr.svg", root_arch_corr, width = 14, height = 14)
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_arch_coor.pdf", root_arch_corr, width = 14, height = 14)
+ggsave("~/root_arch_coor.pdf", root_arch_corr, width = 14, height = 14)
 ```
 
 ## Multivariate summary of root traits across stress treatments ## 
@@ -546,8 +538,7 @@ root_arch_pca <- ggplot(scores, aes(PC1, PC2, color = stress_id)) +
         "Antibiotic_Drought_Herbicide_MP" = "#000000"
     ))
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_arch_pca.png", root_arch_pca, width = 10, height = 10)
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_arch_pca.pdf", root_arch_pca, width = 11, height = 10)
+ggsave("~/root_arch_pca.pdf", root_arch_pca, width = 11, height = 10)
 ```
 
 ## Root Depth ##
@@ -679,8 +670,6 @@ root_depth_multiplicative_effects <- ggplot(plot_data_depth, aes(x = fct_relevel
         axis.text.y = element_blank(), 
         axis.title.x = element_blank()) + 
   theme(plot.title = element_text(hjust = 0.5))
-
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_depth_multiplicative_effects.svg", root_depth_multiplicative_effects)
 ```
 
 ## Number of Root Tips ##
@@ -810,8 +799,6 @@ root_tips_multi_effects <- ggplot(plot_data_tips, aes(x = fct_relevel(combinatio
        color = "Interaction") + 
   theme(axis.title.x = element_blank()) + 
   theme(plot.title = element_text(hjust = 0.5))
-
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_tips_multi_effects.svg", root_tips_multi_effects)
 ```
 
 ## Average Root Diameter ##
@@ -943,8 +930,6 @@ root_diameter_multi_effects <- ggplot(plot_data_diameter, aes(x = fct_relevel(co
         axis.title.y = element_blank(), 
         axis.title.x = element_blank()) +
   theme(plot.title = element_text(hjust = 0.5))
-
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_diameter_multi_effects.svg", root_diameter_multi_effects)
 ```
 
 ## Total Root Length ##
@@ -1074,8 +1059,6 @@ root_length_multi_effects <- ggplot(plot_data_length, aes(x = fct_relevel(combin
        color = "Interaction") + 
   theme(axis.title.x = element_blank()) + 
   theme(plot.title = element_text(hjust = 0.5))
-
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_length_multi_effects.svg", root_length_multi_effects)
 ```
 
 ## Average Root Orientation ##
@@ -1206,8 +1189,6 @@ root_orientation_multi_effects <- ggplot(plot_data_orientation, aes(x = fct_rele
   theme(axis.title.y = element_blank(), 
        axis.text.y = element_blank()) + 
   theme(plot.title = element_text(hjust = 0.5))
-
-#ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_orientation_multi_effects.svg", root_orientation_multi_effects)
 ```
 
 ## Maximum Number of Roots ## 
@@ -1338,8 +1319,6 @@ max_root_multi_effects <- ggplot(plot_data_maxroots, aes(x = fct_relevel(combina
   theme(axis.title.y = element_blank(), 
         axis.text.y = element_blank()) + 
   theme(plot.title = element_text(hjust = 0.5))
-
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/max_root_multi_effects.svg", max_root_multi_effects)
 ```
 
 ## Maximum Width ## 
@@ -1471,8 +1450,6 @@ root_width_multi_effects <- ggplot(plot_data_width, aes(x = fct_relevel(combinat
         axis.text.y = element_blank(), 
         axis.title.x = element_blank()) + 
   theme(plot.title = element_text(hjust = 0.5))
-
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_width_multi_effects.svg", root_width_multi_effects)
 ```
 
 ## Volume ## 
@@ -1604,8 +1581,6 @@ root_volume_multi_effects <- ggplot(plot_data_volume, aes(x = fct_relevel(combin
         axis.text.y = element_blank(), 
         axis.title.x = element_blank()) + 
   theme(plot.title = element_text(hjust = 0.5))
-
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_volume_multi_effects.svg", root_volume_multi_effects)
 ```
 
 ## Width-to-depth ratio ## 
@@ -1736,8 +1711,6 @@ root_wtd_multi_effects <- ggplot(plot_data_wtd, aes(x = fct_relevel(combination,
   theme(plot.title = element_text(hjust = 0.5))
 #+ theme(axis.title.y = element_blank(), 
 #        axis.text.y = element_blank())
-
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_width_to_depth_multi_effects.svg", root_wtd_multi_effects)
 ```
 
 ## Convex Area ## 
@@ -1868,8 +1841,6 @@ root_convex_multi_effects <- ggplot(plot_data_convex, aes(x = fct_relevel(combin
   theme(axis.title.y = element_blank(), 
         axis.text.y = element_blank()) + 
   theme(plot.title = element_text(hjust = 0.5))
-
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_convex_multi_effects.svg", root_convex_multi_effects)
 ```
 
 ## Maximum Diameter ## 
@@ -2001,8 +1972,6 @@ root_maxdiameter_multi_effects <- ggplot(plot_data_maxdiameter, aes(x = fct_rele
         axis.text.y = element_blank(), 
         axis.title.x = element_blank()) + 
   theme(plot.title = element_text(hjust = 0.5))
-
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_maxdiameter_multi_effects.svg", root_maxdiameter_multi_effects)
 ```
 
 ## Medium Angle Frequency ## 
@@ -2134,8 +2103,6 @@ root_medangle_multi_effects <- ggplot(plot_data_medangle, aes(x = fct_relevel(co
         axis.text.y = element_blank(), 
         axis.title.x = element_blank()) + 
   theme(plot.title = element_text(hjust = 0.5))
-
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/root_medangle_multi_effects.svg", root_medangle_multi_effects)
 ```
 
 # Conclusions 
@@ -2166,7 +2133,7 @@ treatment_order <- factor(c("Control", "MP", "Drought", "Herbicide", "Antibiotic
 combined_df$combination <- factor(combined_df$combination, levels = levels(treatment_order))
 
 # separate by category of response variable 
-## (i.e., root + shoot biomass = Biomass; length, tips, surface area, diameter, & depth = Root Architecture)
+## (i.e., root + shoot biomass = Biomass; length, tips, surface area, diameter, depth, etc. = Root Architecture)
 
 # add a category column to the df 
 combined_df <- combined_df %>% 
@@ -2197,8 +2164,7 @@ p_biomass <- ggplot(biomass_df, aes(x = Response, fill = classification)) +
   scale_x_discrete(labels = c("Root Biomass", "Shoot Biomass")) + 
   theme(axis.text.x = element_text(angle =45, hjust =1))
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/prop_biomass_classifications.svg", p_biomass, height = 4, width = 3)
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/prop_biomass_classification.pdf", p_biomass, height = 4, width = 3)
+ggsave("~/prop_biomass_classification.pdf", p_biomass, height = 4, width = 3)
 
 p_arch <- ggplot(architecture_df, aes(x = Response, fill = classification)) + 
   geom_bar(position = "fill") + 
@@ -2213,8 +2179,7 @@ p_arch <- ggplot(architecture_df, aes(x = Response, fill = classification)) +
                               "Volume", "Max. Width", "Width:Depth", "Total Root Length"
   ))
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/prop_architecture_classifications.svg", p_arch, width = 6, height = 4)
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/prop_architecture_classifications.pdf", p_arch, width = 6, height =4)
+ggsave("~/prop_architecture_classifications.pdf", p_arch, width = 6, height =4)
 
 # plot stress ID by biomass and arch 
 p_biomass_stress <- ggplot(biomass_df, aes(x = combination, fill = classification)) + 
@@ -2230,8 +2195,7 @@ p_biomass_stress <- ggplot(biomass_df, aes(x = combination, fill = classificatio
                               "Antibiotic + Herbicide + MP", "Antibiotic + Drought + Herbicide", 
                               "Antibiotic + Drought + Herbicide + MP"))
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/prop_biomass_by_stress.svg", p_biomass_stress, width = 5, height = 4)
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/prop_biomass_by_stress.pdf", p_biomass_stress, width = 5, height = 4)
+ggsave("~/prop_biomass_by_stress.pdf", p_biomass_stress, width = 5, height = 4)
 
 p_arch_stress <- ggplot(architecture_df, aes(x = combination, fill = classification)) + 
   geom_bar(position = "fill") + 
@@ -2246,8 +2210,7 @@ p_arch_stress <- ggplot(architecture_df, aes(x = combination, fill = classificat
                               "Antibiotic + Herbicide + MP", "Antibiotic + Drought + Herbicide", 
                               "Antibiotic + Drought + Herbicide + MP"))
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/prop_arch_by_stress.svg", p_arch_stress, width = 5, height = 4)
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/prop_arch_by_stress.pdf", p_arch_stress, width = 5, height = 4)
+ggsave("~/prop_arch_by_stress.pdf", p_arch_stress, width = 5, height = 4)
 ```
 
 
@@ -2264,6 +2227,5 @@ arch_eff_size_fig <- ggarrange(root_tips_multi_effects, root_depth_multiplicativ
                               common.legend = TRUE, 
                               align = "hv")
 
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/arch_eff_size_full_fig.svg", arch_eff_size_fig, width = 18, height = 14)
-ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/arch_eff_size_full_fig.pdf", arch_eff_size_fig, width = 18, height = 14)
+ggsave("~/arch_eff_size_full_fig.pdf", arch_eff_size_fig, width = 18, height = 14)
 ```
