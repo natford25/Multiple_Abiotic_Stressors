@@ -1,0 +1,1773 @@
+---
+title: "MSE1_16S_multiplicative_v3"
+author: "Natalie Ford"
+date: "`r Sys.Date()`"
+output: html_document
+---
+Final R markdown file for MSE1 publication 
+16S amplicon sequencing analysis 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE, 
+  warning = FALSE, 
+  message = FALSE)
+```
+
+```{r, echo = FALSE}
+# load packages and set theme 
+
+#if(!require("BiocManager", quietly = TRUE))
+#  install.packages("BiocManager")
+
+#BiocManager::install("ALDEx2")
+
+library(ALDEx2); packageVersion("ALDEx2") #1.42.0
+library(devtools)
+library(tidyverse); packageVersion("tidyverse") #2.0.0
+library(phyloseq)
+library(vegan); packageVersion("vegan") # 2.7.3
+library(ggpubr)
+library(dplyr)
+library(ggrepel)
+library(pheatmap)
+library(igraph); packageVersion("igraph") # 2.3.2
+library(ggraph)
+library(tidygraph)
+
+theme_set(theme_bw())
+```
+
+```{r}
+# load data
+load("~/Desktop/FDA_Lab/Experiment1/manuscript/data/phyloseq_rarefied.Rdata")
+ntaxa(physeq_rare)
+```
+
+```{r}
+# seaparate out controls from samples
+physeq_mse1.controls <- subset_samples(physeq_rare, Stress_ID %in% c("Negative_Control")) %>% prune_taxa(taxa_sums(.)>0,.)
+
+#remove controls: 
+physeq_mse1.filtered1 <- subset_samples(physeq_rare, !(Stress_ID %in% c("Negative_Control")))
+
+#remove sample ID 47 for low reads: 
+physeq_mse1.filtered2 <- subset_samples(physeq_mse1.filtered1, !(ID %in% c("47")))
+
+# remove sample ID 164 (extreme outlier)
+physeq_mse1.filtered3 <- subset_samples(physeq_mse1.filtered2, !(ID %in% c("164")))
+
+# remove sample IDs 71 & 66 (outliers from root physiology dataset)
+physeq_mse1.filtered3 <- subset_samples(physeq_mse1.filtered3, !(ID %in% c("71", "66")))
+
+# remove sample IDs that were not able to be submitted for metabolomics (e.g., missing from exudate dataset)
+physeq_mse1.filtered3 <- subset_samples(physeq_mse1.filtered3, !(ID %in% c("67", "80", "125", "128")))
+```
+
+```{r}
+# Calculate alpha diversity and add to data frame:
+alphadiv <- estimate_richness(physeq_mse1.filtered3, measures=c('Observed', 'Chao1','Shannon', 'InvSimpson')) %>%
+  as.data.frame() 
+# Convert to true diversity https://twitter.com/derekseveri/status/1106359475756240898?lang=en
+alphadiv$Shannon_true_diversity <- exp(alphadiv$Shannon)
+rownames(alphadiv) <- str_replace_all(rownames(alphadiv),'\\.','-') # change row names . to - for compatibility with phyloseq
+
+rownames(alphadiv) <- sample_names(physeq_mse1.filtered3)
+
+smd <- cbind(sample_data(physeq_mse1.filtered3), alphadiv)
+
+sample_data(physeq_mse1.filtered3) <- smd  # update in phyloseq object
+
+# save 
+save(physeq_mse1.filtered3, file="~/Desktop/FDA_Lab/Experiment1/manuscript/data/phyloseq_filtered_alphadiv_updated.Rdata")
+```
+
+```{r}
+# plot alpha diversity
+
+#change the order of the factor levels explicitly for plots 
+smd$Stress_ID <- factor(smd$Stress_ID, 
+                            levels = c("Control", "MP", "Drought", "Herbicide", "Antibiotic",
+                                       "Drought_MP", "Herbicide_MP", 
+                                       "Antibiotic_MP", "Drought_Herbicide",
+                                       "Antibiotic_Drought","Antibiotic_Herbicide", 
+                                       "Drought_Herbicide_MP", "Antibiotic_Drought_MP", 
+                                       "Antibiotic_Herbicide_MP", "Antibiotic_Drought_Herbicide", 
+                                       "Antibiotic_Drought_Herbicide_MP"
+                                       ))
+
+#set up boxplots comparing diversity indeces and Stress ID 
+plot.Chao1 <- ggplot(smd, aes(x = Stress_ID, y = Chao1)) + 
+  geom_jitter(color = "black", width = 0.3) +
+  geom_boxplot(alpha = 0.8) + 
+  ylab("Chao1") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+plot.Shannon <- ggplot(smd, aes(x = Stress_ID, y = Shannon)) +
+  geom_jitter(color = "black", width = 0.3) +
+  geom_boxplot(alpha = 0.8) + 
+  ylab("Shannon's Diversity") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+plot.InvSimp <- ggplot(smd, aes(x = Stress_ID, y = InvSimpson)) +
+  geom_jitter(color = "black", width = 0.3) +
+  geom_boxplot(alpha = 0.8) + 
+  ylab("Inverse Simpson Diversity") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+plot.Obs.ASVs <- ggplot(smd, aes(x = Stress_ID, y = Observed, color = Stress_ID)) +
+  geom_jitter(width = 0.3) +
+  geom_boxplot(alpha = 0.8) + 
+  ylab("Observed ASVs") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
+  scale_color_manual(
+    values = c(
+      "Control" = "#e6194B",
+      "MP" = "#3cb44b",
+      "Drought" = "#ffe119",
+      "Herbicide" = "#4363d8",
+      "Antibiotic" = "#f58231",
+      "Drought_MP" = "#42d4f4",
+      "Antibiotic_MP" = "#f032e6",
+      "Herbicide_MP" = "#469990",
+      "Antibiotic_Herbicide" = "#9A6324",
+      "Drought_Herbicide" = "#800000",
+      "Antibiotic_Drought" = "#911eb4",
+      "Antibiotic_Drought_Herbicide" = "#bfef45", 
+      "Antibiotic_Drought_MP" = "#808000",
+      "Antibiotic_Herbicide_MP" = "#000075",
+      "Drought_Herbicide_MP" = "#a9a9a9", 
+      "Antibiotic_Drought_Herbicide_MP" = "#000000"
+    )
+  )
+
+#save only shannon's diversity plot 
+#ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/shannondiv.pdf", plot.Shannon, width = 8, height = 5)
+
+#save only observed ASV plot 
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/obs_ASV_plot.pdf", plot.Obs.ASVs)
+```
+
+## Ordination 
+```{r}
+# ordinate with jsd distance 
+pcoa_ord_jsd <- ordinate(physeq_mse1.filtered3, method = "PCoA", distance = "jsd")
+
+unconstrained_ordination_jsd <- plot_ordination(physeq_mse1.filtered3, pcoa_ord_jsd, type = "samples", color = "Stress_ID") +
+  geom_point(size = 4) +
+  theme_bw() + 
+  scale_color_manual(
+    values = c(
+        "Control" = "#e6194B",
+        "MP" = "#3cb44b",
+        "Drought" = "#ffe119",
+        "Herbicide" = "#4363d8",
+        "Antibiotic" = "#f58231",
+        "Drought_MP" = "#42d4f4",
+        "Antibiotic_MP" = "#f032e6",
+        "Herbicide_MP" = "#469990",
+        "Antibiotic_Herbicide" = "#9A6324",
+        "Drought_Herbicide" = "#800000",
+        "Antibiotic_Drought" = "#911eb4",
+        "Antibiotic_Drought_Herbicide" = "#bfef45", 
+        "Antibiotic_Drought_MP" = "#808000",
+        "Antibiotic_Herbicide_MP" = "#000075",
+        "Drought_Herbicide_MP" = "#a9a9a9", 
+        "Antibiotic_Drought_Herbicide_MP" = "#000000"
+    )) # the clustering is not as clear compared to bray-curtis 
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/pcoa_jsd_ordination.pdf", unconstrained_ordination_jsd, width = 10, height = 8)
+```
+
+# Variance partitioning 
+```{r}
+#  PERMANOVA 
+dist_full_jsd <- phyloseq::distance(physeq_mse1.filtered3, method = "jsd") 
+dist_full_jsd_mat <- as.matrix(dist_full_jsd)
+
+env_vars <- c("Stress_ID", "Depth.mm", "Average.Diameter.mm", "Number.of.Root.Tips", "Total.Root.Length.mm", "Root_Biomass", 
+                                             "Maximum.Number.of.Roots", "Maximum.Width.mm", "Width.to.Depth.Ratio", "Convex.Area.mm2", "Maximum.Diameter.mm", 
+                                             "Volume.mm3", "Average.Root.Orientation.deg", "Medium.Angle.Frequency")
+
+# test each variable individually 
+r2_values <- sapply(env_vars, function(var) {
+  adonis2(dist_full_jsd_mat ~ smd[[var]], permuatations = 9999)$R2[1]
+})
+
+# rank by R2 (variation explained)
+rank_env <- data.frame(
+  Variable = env_vars, 
+  R2 = r2_values, 
+  P_value = sapply(env_vars, function(var) {
+    adonis2(dist_full_jsd_mat ~ smd[[var]], permutations = 9999)$`Pr(>F)`[1]
+  })
+) %>% arrange(desc(R2)) 
+
+rank_env #R2 = % variation each variable explains 
+
+# rank for plotting
+rank_env <- rank_env %>% 
+  arrange(desc(R2)) %>% 
+  mutate(Variable = factor(Variable, levels = Variable), 
+         R2_pct = R2 * 100) # convert to percentage for plotting 
+```
+
+
+# Building a 16x16 treatment-by-treatment JSD matrix, where each cell is the mean JSD distance between all replicates in replicates in treatment A and all replicates in treatment B (between-group mean pair distances)
+```{r}
+dist_full_jsd_mat #confirm that you have a jsd distance matrix already made 
+Stress <- smd$Stress_ID
+
+# compute mean distance (and spread) from control to each treatment 
+control_label <- "Control"  
+treats          <- unique(Stress)
+other_treats    <- treats[treats != control_label]
+
+# Storage
+res_jsd <- data.frame(
+  Treatment = character(),
+  Distance_to_Control_jsd = numeric(),
+  SE = numeric(),
+  n_pairs = integer(),
+  stringsAsFactors = FALSE
+)
+
+for (trt in other_treats) {
+  # Indices of samples in Control
+  s_ctrl  <- which(Stress == control_label)
+  # Indices of samples in treatment `trt`
+  s_trt   <- which(Stress == trt)
+  
+  # All Control–Treatment distances (each Control rep vs each trt rep)
+  d_ctl_trt_jsd <- dist_full_jsd_mat[s_ctrl, s_trt]
+  
+  # Mean and SE
+  m <- mean(d_ctl_trt_jsd)
+  se <- sd(d_ctl_trt_jsd) / sqrt(length(d_ctl_trt_jsd))
+  n_pairs <- length(d_ctl_trt_jsd)
+  
+  res_jsd <- rbind(res_jsd, data.frame(
+    Treatment = trt,
+    Distance_to_Control_jsd = m,
+    SE = se,
+    n_pairs = n_pairs, 
+    stringsAsFactors = FALSE
+  ))
+}
+
+# now add a column for the distance between each rep and the control 
+res_jsd$dist_to_mean_reps_jsd <- vector("list", nrow(res_jsd))
+
+for (i in 1:nrow(res_jsd)) {
+  trt <- res_jsd$Treatment[i]
+  s_ctrl <- which(Stress == control_label)
+  s_trt <- which(Stress == trt)
+  
+  mean_dist_per_trt_rep <- apply(dist_full_jsd_mat[s_trt, s_ctrl, drop = FALSE], 1, mean) - res_jsd$Distance_to_Control_jsd[i]
+  res_jsd$dist_to_mean_reps_jsd[[i]] <- mean_dist_per_trt_rep
+}
+
+# keep raw data (as long-data frame) for plotting 
+raw_jsd_df <- data.frame()
+
+for (trt in other_treats) {
+  s_ctrl <- which(Stress == control_label)
+  s_trt <- which(Stress == trt)
+
+  d_ctl_trt_jsd <- dist_full_jsd_mat[s_ctrl, s_trt]
+
+  raw_jsd_df <- rbind(
+    raw_jsd_df,
+    data.frame(
+      Treatment = trt,
+      Distance_to_Control_jsd = as.vector(d_ctl_trt_jsd)
+    )
+  )
+}
+
+# sort x axis 
+treatment_order <- factor(c("Control", "MP", "Drought", "Herbicide", "Antibiotic",
+                          "Drought_MP", "Herbicide_MP", "Antibiotic_MP", 
+                          "Drought_Herbicide", "Antibiotic_Drought", "Antibiotic_Herbicide",
+                          "Drought_Herbicide_MP", "Antibiotic_Drought_MP", 
+                          "Antibiotic_Herbicide_MP", "Antibiotic_Drought_Herbicide", 
+                          "Antibiotic_Drought_Herbicide_MP"), 
+                         levels = c("Control", "MP", "Drought", "Herbicide", "Antibiotic",
+                                   "Drought_MP", "Herbicide_MP", "Antibiotic_MP", 
+                                   "Drought_Herbicide", "Antibiotic_Drought", "Antibiotic_Herbicide",
+                                   "Drought_Herbicide_MP", "Antibiotic_Drought_MP", 
+                                   "Antibiotic_Herbicide_MP", "Antibiotic_Drought_Herbicide", 
+                                  "Antibiotic_Drought_Herbicide_MP"))
+
+res_jsd$Treatment <- factor(res_jsd$Treatment, levels = levels(treatment_order))
+raw_jsd_df$Treatment <- factor(raw_jsd_df$Treatment, levels = levels(treatment_order))
+
+# plot with variation around the mean 
+jsd_mean_distances_se <- ggplot(res_jsd, aes(x = Treatment, y = Distance_to_Control_jsd)) +
+  geom_point(color = "black", size = 3) +
+  geom_errorbar(
+    aes(ymin = Distance_to_Control_jsd - SE,
+        ymax = Distance_to_Control_jsd + SE),
+    width = 0.2,
+    color = "black"
+  ) +
+  ylab("Mean JSD distance to Control") +
+  xlab("Treatment") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+## Add metabolomics data 
+metabolomic_jsd_data <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/metabolomic_jsd_data.rds")
+# combine with microbiome 
+control_jsd_combined <- bind_rows(list(microbiome = res_jsd, metabolites = metabolomic_jsd_data), 
+                                  .id = "data_type")
+
+combined_control_jsd <- ggplot(control_jsd_combined, aes(x = Treatment, y = Distance_to_Control_jsd, color = data_type)) + 
+  geom_point(size = 3) + 
+  geom_errorbar(
+    aes(ymin = Distance_to_Control_jsd - SE, 
+        ymax = Distance_to_Control_jsd + SE), 
+    width = 0.2
+  ) + 
+  ylab("Mean JSD distance to Control") + 
+  xlab("Treatment") + 
+#  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  scale_color_manual(values = c("microbiome" = "#4363d8", "metabolites" = "#e6194B")) + 
+  coord_flip()
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/combined_control_jsd.pdf", combined_control_jsd, width = 10, height = 14)
+```
+
+
+```{r}
+# plotting the average distance dot plot and facet by treatment 
+# remember that we already calculated the distance matrix with jsd distance. Double check you have it 
+dist_full_jsd_mat
+
+#### for dual-stress ####
+## MP + Drought ## 
+# labels 
+Stress_ID <- smd$Stress_ID
+inds_MP         <- which(Stress_ID == "MP")
+inds_Drought    <- which(Stress_ID == "Drought")
+inds_Drought_MP <- which(Stress_ID == "Drought_MP")
+
+# get all distances between drought_MP and MP
+d_DMP_MP <- dist_full_jsd_mat[inds_Drought_MP, inds_MP]
+c(length(d_DMP_MP), head(d_DMP_MP))
+
+mean(d_DMP_MP)
+sd(d_DMP_MP)
+
+# repeat for drought 
+d_DMP_D <- dist_full_jsd_mat[inds_Drought_MP, inds_Drought]
+mean(d_DMP_D)
+sd(d_DMP_D)
+
+drought_mp_distances <- data.frame(
+  treatment = c("MP",
+                 "Drought"),
+  mean_dist  = c(mean(d_DMP_MP), mean(d_DMP_D)),
+  SE         = c(sd(d_DMP_MP, na.rm = TRUE) / sqrt(length(d_DMP_MP)),
+                  sd(d_DMP_D,  na.rm = TRUE) / sqrt(length(d_DMP_D))))
+
+# plot   
+DRMP_jsd_distance <- ggplot(drought_mp_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  labs(y = "Mean JSD Pairwise Distance") + 
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Drought + MP") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+## Add metabolomics data 
+drought_mp_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/drought_mp_metabolomics_d.rds")
+# combine with microbiome 
+DRMP_jsd_combined <- bind_rows(list(microbiome = drought_mp_distances, metabolites = drought_mp_metabolomics_d), 
+                                  .id = "data_type")
+
+combined_DRMP_jsd <- ggplot(DRMP_jsd_combined, aes(x = treatment, y = mean_dist, color = data_type)) + 
+  geom_point(size = 3) + 
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, 
+        ymax = mean_dist + SE), 
+    width = 0.2
+  ) + 
+  ylab("Mean JSD Pairwise Distance") + 
+  scale_color_manual(values = c("microbiome" = "#4363d8", "metabolites" = "#e6194B")) + 
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Drought + MP") + 
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  coord_flip()
+
+## MP + AB ## 
+# labels 
+inds_Antibiotic <- which(Stress_ID == "Antibiotic")
+inds_Antibiotic_MP <- which(Stress_ID == "Antibiotic_MP")
+
+# get all distances between drought_MP and MP
+d_ABMP_MP <- dist_full_jsd_mat[inds_Antibiotic_MP, inds_MP]
+# repeat for drought 
+d_ABMP_AB <- dist_full_jsd_mat[inds_Antibiotic_MP, inds_Antibiotic]
+
+antibiotic_mp_distances <- data.frame(
+  treatment = c("MP",
+                 "Antibiotic"),
+  mean_dist  = c(mean(d_ABMP_MP), mean(d_ABMP_AB)),
+  SE         = c(sd(d_ABMP_MP, na.rm = TRUE) / sqrt(length(d_ABMP_MP)),
+                  sd(d_ABMP_AB,  na.rm = TRUE) / sqrt(length(d_ABMP_AB)))
+)
+
+# plot 
+ABMP_jsd_distance <- ggplot(antibiotic_mp_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  theme(axis.title.y = element_blank()) +
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Antibiotic + MP") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+## Add metabolomics data 
+antibiotic_mp_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_mp_metabolomics_d.rds")
+# combine with microbiome 
+ABMP_jsd_combined <- bind_rows(list(microbiome = antibiotic_mp_distances, metabolites = antibiotic_mp_metabolomics_d), 
+                                  .id = "data_type")
+
+combined_ABMP_jsd <- ggplot(ABMP_jsd_combined, aes(x = treatment, y = mean_dist, color = data_type)) + 
+  geom_point(size = 3) + 
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, 
+        ymax = mean_dist + SE), 
+    width = 0.2
+  ) + 
+  ylab("Mean JSD Pairwise Distance") + 
+  scale_color_manual(values = c("microbiome" = "#4363d8", "metabolites" = "#e6194B")) + 
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Antibiotic + MP") + 
+  theme(plot.title = element_text(hjust = 0.5)) + coord_flip()
+
+## MP + HB ## 
+# labels 
+inds_Herbicide <- which(Stress_ID == "Herbicide")
+inds_Herbicide_MP <- which(Stress_ID == "Herbicide_MP")
+
+# get all distances between drought_MP and MP
+d_HBMP_MP <- dist_full_jsd_mat[inds_Herbicide_MP, inds_MP]
+# repeat for drought 
+d_HBMP_HB <- dist_full_jsd_mat[inds_Herbicide_MP, inds_Herbicide]
+
+herbicide_mp_distances <- data.frame(
+  treatment = c("MP",
+                 "Herbicide"),
+  mean_dist  = c(mean(d_HBMP_MP), mean(d_HBMP_HB)),
+  SE         = c(sd(d_HBMP_MP, na.rm = TRUE) / sqrt(length(d_HBMP_MP)),
+                  sd(d_HBMP_HB,  na.rm = TRUE) / sqrt(length(d_HBMP_HB)))
+)
+
+# plot 
+HBMP_jsd_distance <- ggplot(herbicide_mp_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  theme(axis.title.y = element_blank()) + 
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Herbicide + MP") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+## Add metabolomics data 
+herbicide_mp_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/herbicide_mp_metabolomics_d.rds")
+# combine with microbiome 
+HBMP_jsd_combined <- bind_rows(list(microbiome = herbicide_mp_distances, metabolites = herbicide_mp_metabolomics_d), 
+                                  .id = "data_type")
+
+combined_HBMP_jsd <- ggplot(HBMP_jsd_combined, aes(x = treatment, y = mean_dist, color = data_type)) + 
+  geom_point(size = 3) + 
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, 
+        ymax = mean_dist + SE), 
+    width = 0.2
+  ) + 
+  ylab("Mean JSD Pairwise Distance") + 
+  scale_color_manual(values = c("microbiome" = "#4363d8", "metabolites" = "#e6194B")) + 
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Hericide + MP") + 
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  coord_flip()
+
+## AB + HB ## 
+# labels 
+inds_Antibiotic_Herbicide <- which(Stress_ID == "Antibiotic_Herbicide")
+
+# get all distances between drought_MP and MP
+d_ABHB_AB <- dist_full_jsd_mat[inds_Antibiotic_Herbicide, inds_Antibiotic]
+# repeat for drought 
+d_ABHB_HB <- dist_full_jsd_mat[inds_Antibiotic_Herbicide, inds_Herbicide]
+
+antibiotic_herbicide_distances <- data.frame(
+  treatment = c("Antibiotic",
+                 "Herbicide"),
+  mean_dist  = c(mean(d_ABHB_AB), mean(d_ABHB_HB)),
+  SE         = c(sd(d_ABHB_AB, na.rm = TRUE) / sqrt(length(d_ABHB_AB)),
+                  sd(d_ABHB_HB,  na.rm = TRUE) / sqrt(length(d_ABHB_HB)))
+)
+
+# plot 
+ABHB_jsd_distance <- ggplot(antibiotic_herbicide_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  labs(x = "Component Stress Treatments",
+    y = "Mean JSD Pairwise Distance") + 
+  ggtitle("Antibiotic + Herbicide") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+## Add metabolomics data 
+antibiotic_herbicide_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_herbicide_metabolomics_d.rds")
+# combine with microbiome 
+ABHB_jsd_combined <- bind_rows(list(microbiome = antibiotic_herbicide_distances, metabolites = antibiotic_herbicide_metabolomics_d), 
+                                  .id = "data_type")
+
+combined_ABHB_jsd <- ggplot(ABHB_jsd_combined, aes(x = treatment, y = mean_dist, color = data_type)) + 
+  geom_point(size = 3) + 
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, 
+        ymax = mean_dist + SE), 
+    width = 0.2
+  ) + 
+  ylab("Mean JSD Pairwise Distance") + 
+  scale_color_manual(values = c("microbiome" = "#4363d8", "metabolites" = "#e6194B")) + 
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Antibiotic + Herbicide") + 
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  coord_flip()
+
+## DR + HB ## 
+# labels 
+inds_Drought_Herbicide <- which(Stress_ID == "Drought_Herbicide")
+
+# get all distances between drought_MP and MP
+d_DRHB_DR <- dist_full_jsd_mat[inds_Drought_Herbicide, inds_Drought]
+# repeat for drought 
+d_DRHB_HB <- dist_full_jsd_mat[inds_Drought_Herbicide, inds_Herbicide]
+
+drought_herbicide_distances <- data.frame(
+  treatment = c("Drought",
+                 "Herbicide"),
+  mean_dist  = c(mean(d_DRHB_DR), mean(d_DRHB_HB)),
+  SE         = c(sd(d_DRHB_DR, na.rm = TRUE) / sqrt(length(d_DRHB_DR)),
+                  sd(d_DRHB_HB,  na.rm = TRUE) / sqrt(length(d_DRHB_HB)))
+)
+
+# plot 
+DRHB_jsd_distance <- ggplot(drought_herbicide_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  labs(x = "Component Stress Treatments") + 
+  theme(axis.title.y = element_blank()) +
+  ggtitle("Drought + Herbicide") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+## Add metabolomics data 
+drought_herbicide_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/drought_herbicide_metabolomics_d.rds")
+# combine with microbiome 
+DRHB_jsd_combined <- bind_rows(list(microbiome = drought_herbicide_distances, metabolites = drought_herbicide_metabolomics_d), 
+                                  .id = "data_type")
+
+combined_DRHB_jsd <- ggplot(DRHB_jsd_combined, aes(x = treatment, y = mean_dist, color = data_type)) + 
+  geom_point(size = 3) + 
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, 
+        ymax = mean_dist + SE), 
+    width = 0.2
+  ) + 
+  ylab("Mean JSD Pairwise Distance") + 
+  scale_color_manual(values = c("microbiome" = "#4363d8", "metabolites" = "#e6194B")) + 
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Drought + Herbicide") + 
+  theme(plot.title = element_text(hjust = 0.5)) + coord_flip()
+
+## DR + AB ## 
+# labels 
+inds_Antibiotic_Drought <- which(Stress_ID == "Antibiotic_Drought")
+
+# get all distances between drought_MP and MP
+d_ABDR_DR <- dist_full_jsd_mat[inds_Antibiotic_Drought, inds_Drought]
+# repeat for drought 
+d_ABDR_AB <- dist_full_jsd_mat[inds_Antibiotic_Drought, inds_Antibiotic]
+
+antibiotic_drought_distances <- data.frame(
+  treatment = c("Antibiotic",
+                 "Drought"),
+  mean_dist  = c(mean(d_ABDR_AB), mean(d_ABDR_DR)),
+  SE         = c(sd(d_ABDR_AB, na.rm = TRUE) / sqrt(length(d_ABDR_AB)),
+                  sd(d_ABDR_DR,  na.rm = TRUE) / sqrt(length(d_ABDR_DR)))
+)
+
+# plot 
+ABDR_jsd_distance <- ggplot(antibiotic_drought_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  labs(x = "Component Stress Treatments") +
+  theme(axis.title.y = element_blank()) +
+  ggtitle("Antibiotic + Drought") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+## Add metabolomics data 
+antibiotic_drought_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_drought_metabolomics_d.rds")
+# combine with microbiome 
+ABDR_jsd_combined <- bind_rows(list(microbiome = antibiotic_drought_distances, metabolites = antibiotic_drought_metabolomics_d), 
+                                  .id = "data_type")
+
+combined_ABDR_jsd <- ggplot(ABDR_jsd_combined, aes(x = treatment, y = mean_dist, color = data_type)) + 
+  geom_point(size = 3) + 
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, 
+        ymax = mean_dist + SE), 
+    width = 0.2
+  ) + 
+  ylab("Mean JSD Pairwise Distance") + 
+  scale_color_manual(values = c("microbiome" = "#4363d8", "metabolites" = "#e6194B")) + 
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Antibiotic + Drought") + 
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  coord_flip()
+
+### arrange dual stress plots ### 
+two_stress_jsd_plots <- ggarrange(DRMP_jsd_distance, ABMP_jsd_distance, HBMP_jsd_distance, ABHB_jsd_distance, DRHB_jsd_distance, ABDR_jsd_distance,
+          ncol = 3, nrow = 2)
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/plots/two_stress_jsd.svg", two_stress_jsd_plots,width = 14, height = 6)
+
+two_stress_combined_jsd <- ggarrange(combined_DRMP_jsd, combined_ABMP_jsd, combined_HBMP_jsd,
+                                     combined_ABHB_jsd, combined_DRHB_jsd, combined_ABDR_jsd,
+                                     ncol = 3, nrow = 2, common.legend = TRUE) # don't love how this looks because it's hard to see differences in microbiome data (distances in metabolomics are so much greater)
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/two_stress_combined_jsd.pdf", two_stress_combined_jsd, width = 12)
+
+### 3-way stresses ### 
+## DR + AB + MP ## 
+# labels 
+inds_Antibiotic_Drought_MP <- which(Stress_ID == "Antibiotic_Drought_MP")
+
+# get all distances 
+d_ABDRMP_DRMP <- dist_full_jsd_mat[inds_Antibiotic_Drought_MP, inds_Drought_MP]
+d_ABDRMP_ABMP <- dist_full_jsd_mat[inds_Antibiotic_Drought_MP, inds_Antibiotic_MP]
+d_ABDRMP_ABDR <- dist_full_jsd_mat[inds_Antibiotic_Drought_MP, inds_Antibiotic_Drought]
+
+antibiotic_drought_mp_distances <- data.frame(
+  treatment = c("Drought_MP", "Antibiotic_MP", "Antibiotic_Drought"),
+  mean_dist  = c(mean(d_ABDRMP_DRMP), mean(d_ABDRMP_ABMP), mean(d_ABDRMP_ABDR)),
+  SE         = c(sd(d_ABDRMP_DRMP, na.rm = TRUE) / sqrt(length(d_ABDRMP_DRMP)),
+                  sd(d_ABDRMP_ABMP,  na.rm = TRUE) / sqrt(length(d_ABDRMP_ABMP)), 
+                 sd(d_ABDRMP_ABDR, na.rm = TRUE) / sqrt(length(d_ABDRMP_ABDR)))
+)
+
+# plot 
+ABDRMP_jsd_distance <- ggplot(antibiotic_drought_mp_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  labs(y = "Mean JSD Pairwise Distance") +
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Antibiotic + Drought + MP") +
+  theme(plot.title = element_text(hjust = 0.5))
+  
+## Add metabolomics data 
+antibiotic_drought_mp_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_drought_mp_metabolomics_d.rds")
+# combine with microbiome 
+ABDRMP_jsd_combined <- bind_rows(list(microbiome = antibiotic_drought_mp_distances, metabolites = antibiotic_drought_mp_metabolomics_d), 
+                                 .id = "data_type")
+
+combined_ABDRMP_jsd <- ggplot(ABDRMP_jsd_combined, aes(x = treatment, y = mean_dist, color = data_type)) + 
+  geom_point(size = 3) + 
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, 
+        ymax = mean_dist + SE), 
+    width = 0.2
+  ) + 
+  ylab("Mean JSD Pairwise Distance") + 
+  scale_color_manual(values = c("microbiome" = "#4363d8", "metabolites" = "#e6194B")) + 
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Antibiotic + Drought + MP") + 
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  coord_flip()
+
+## MP + DR + HB ## 
+# labels 
+inds_Drought_Herbicide_MP <- which(Stress_ID == "Drought_Herbicide_MP")
+
+# get all distances 
+d_DRHBMP_DRMP <- dist_full_jsd_mat[inds_Drought_Herbicide_MP, inds_Drought_MP]
+d_DRHBMP_HBMP <- dist_full_jsd_mat[inds_Drought_Herbicide_MP, inds_Herbicide_MP]
+d_DRHBMP_DRHB <- dist_full_jsd_mat[inds_Drought_Herbicide_MP, inds_Drought_Herbicide]
+
+drought_herbicide_mp_distances <- data.frame(
+  treatment = c("Drought_MP", "Herbicide_MP", "Drought_Herbicide"),
+  mean_dist  = c(mean(d_DRHBMP_DRMP), mean(d_DRHBMP_HBMP), mean(d_DRHBMP_DRHB)),
+  SE         = c(sd(d_DRHBMP_DRMP, na.rm = TRUE) / sqrt(length(d_DRHBMP_DRMP)),
+                  sd(d_DRHBMP_HBMP,  na.rm = TRUE) / sqrt(length(d_DRHBMP_HBMP)), 
+                 sd(d_DRHBMP_DRHB, na.rm = TRUE) / sqrt(length(d_DRHBMP_DRHB)))
+)
+
+# plot 
+DRHBMP_jsd_distance <- ggplot(drought_herbicide_mp_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  theme(axis.title.y = element_blank()) + 
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Drought + Herbicide + MP") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+## Add metabolomics data 
+drought_herbicide_mp_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/drought_herbicide_mp_metabolomics_d.rds")
+# combine with microbiome 
+DRHBMP_jsd_combined <- bind_rows(list(microbiome = drought_herbicide_mp_distances, metabolites = drought_herbicide_mp_metabolomics_d), 
+                                 .id = "data_type")
+
+combined_DRHBMP_jsd <- ggplot(DRHBMP_jsd_combined, aes(x = treatment, y = mean_dist, color = data_type)) + 
+  geom_point(size = 3) + 
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, 
+        ymax = mean_dist + SE), 
+    width = 0.2
+  ) + 
+  ylab("Mean JSD Pairwise Distance") + 
+  scale_color_manual(values = c("microbiome" = "#4363d8", "metabolites" = "#e6194B")) + 
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Drought + Herbicide + MP") + 
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  coord_flip()
+
+## AB + HB + MP ## 
+# labels 
+inds_Antibiotic_Herbicide_MP <- which(Stress_ID == "Antibiotic_Herbicide_MP")
+
+# get all distances 
+d_ABHBMP_ABMP <- dist_full_jsd_mat[inds_Antibiotic_Herbicide_MP, inds_Antibiotic_MP]
+d_ABHBMP_HBMP <- dist_full_jsd_mat[inds_Antibiotic_Herbicide_MP, inds_Herbicide_MP]
+d_ABHBMP_ABHB <- dist_full_jsd_mat[inds_Antibiotic_Herbicide_MP, inds_Antibiotic_Herbicide]
+
+antibiotic_herbicide_mp_distances <- data.frame(
+  treatment = c("Antibiotic_MP", "Herbicide_MP", "Antibiotic_Herbicide"),
+  mean_dist  = c(mean(d_ABHBMP_ABMP), mean(d_ABHBMP_HBMP), mean(d_ABHBMP_ABHB)),
+  SE         = c(sd(d_ABHBMP_ABMP, na.rm = TRUE) / sqrt(length(d_ABHBMP_ABMP)),
+                  sd(d_ABHBMP_HBMP,  na.rm = TRUE) / sqrt(length(d_ABHBMP_HBMP)), 
+                 sd(d_ABHBMP_ABHB, na.rm = TRUE) / sqrt(length(d_ABHBMP_ABHB)))
+)
+
+# plot 
+ABHBMP_jsd_distance <- ggplot(antibiotic_herbicide_mp_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  labs(x = "Component Stress Treatments",
+    y = "Mean JSD Pairwise Distance") +
+  ggtitle("Antibiotic + Herbicide + MP") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+## Add metabolomics data 
+antibiotic_herbicide_mp_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_herbicide_mp_metabolomics_d.rds")
+# combine with microbiome 
+ABHBMP_jsd_combined <- bind_rows(list(microbiome = antibiotic_herbicide_mp_distances, metabolites = antibiotic_herbicide_mp_metabolomics_d), 
+                                 .id = "data_type")
+
+combined_ABHBMP_jsd <- ggplot(ABHBMP_jsd_combined, aes(x = treatment, y = mean_dist, color = data_type)) + 
+  geom_point(size = 3) + 
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, 
+        ymax = mean_dist + SE), 
+    width = 0.2
+  ) + 
+  ylab("Mean JSD Pairwise Distance") + 
+  scale_color_manual(values = c("microbiome" = "#4363d8", "metabolites" = "#e6194B")) + 
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Antibiotic + Herbicide + MP") + 
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  coord_flip()
+
+## AB + DR + HB ## 
+# labels 
+inds_Antibiotic_Drought_Herbicide <- which(Stress_ID == "Antibiotic_Drought_Herbicide")
+
+# get all distances 
+d_ABDRHB_ABHB <- dist_full_jsd_mat[inds_Antibiotic_Drought_Herbicide, inds_Antibiotic_Herbicide]
+d_ABDRHB_DRHB <- dist_full_jsd_mat[inds_Antibiotic_Drought_Herbicide, inds_Drought_Herbicide]
+d_ABDRHB_ABDR <- dist_full_jsd_mat[inds_Antibiotic_Drought_Herbicide, inds_Antibiotic_Drought]
+
+antibiotic_drought_herbicide_distances <- data.frame(
+  treatment = c("Antibiotic_Herbicide", "Drought_Herbicide", "Antibiotic_Drought"),
+  mean_dist  = c(mean(d_ABDRHB_ABHB), mean(d_ABDRHB_DRHB), mean(d_ABDRHB_ABDR)),
+  SE         = c(sd(d_ABDRHB_ABHB, na.rm = TRUE) / sqrt(length(d_ABDRHB_ABHB)),
+                  sd(d_ABDRHB_DRHB,  na.rm = TRUE) / sqrt(length(d_ABDRHB_DRHB)), 
+                 sd(d_ABDRHB_ABDR, na.rm = TRUE) / sqrt(length(d_ABDRHB_ABDR)))
+)
+
+# plot 
+ABDRHB_jsd_distance <- ggplot(antibiotic_drought_herbicide_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  labs(x = "Component Stress Treatments") +
+  theme(axis.title.y = element_blank()) + 
+  ggtitle("Antibiotic + Drought + Herbicide") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+## Add metabolomics data 
+antibiotic_drought_herbicide_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/antibiotic_drought_herbicide_metabolomics_d.rds")
+# combine with microbiome 
+ABDRHB_jsd_combined <- bind_rows(list(microbiome = antibiotic_drought_herbicide_distances, metabolites = antibiotic_drought_herbicide_metabolomics_d), 
+                                 .id = "data_type")
+
+combined_ABDRHB_jsd <- ggplot(ABDRHB_jsd_combined, aes(x = treatment, y = mean_dist, color = data_type)) + 
+  geom_point(size = 3) + 
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, 
+        ymax = mean_dist + SE), 
+    width = 0.2
+  ) + 
+  ylab("Mean JSD Pairwise Distance") + 
+  scale_color_manual(values = c("microbiome" = "#4363d8", "metabolites" = "#e6194B")) + 
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Antibiotic + Drought + Herbicide") + 
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  coord_flip()
+
+### arrange 3 stress plots ### 
+three_stress_jsd_plots <- ggarrange(ABDRMP_jsd_distance, DRHBMP_jsd_distance, ABHBMP_jsd_distance, ABDRHB_jsd_distance,
+          ncol = 2, nrow = 2)
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/plots/three_stress_jsd.svg", three_stress_jsd_plots, width = 14, height = 6)
+
+three_stress_combined_jsd <- ggarrange(combined_ABDRMP_jsd, combined_DRHBMP_jsd, combined_ABHBMP_jsd, combined_ABDRHB_jsd, 
+                                       ncol = 2, nrow = 2, common.legend = TRUE)
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/three_stress_combined_jsd.pdf", three_stress_combined_jsd, width = 10)
+
+#### 4 stress #### 
+## AB + DR + HB + MP ## 
+# labels 
+inds_Antibiotic_Drought_Herbicide_MP <- which(Stress_ID == "Antibiotic_Drought_Herbicide_MP")
+
+# get all distances 
+d_ABDRHBMP_ABDRMP <- dist_full_jsd_mat[inds_Antibiotic_Drought_Herbicide_MP, inds_Antibiotic_Drought_MP]
+d_ABDRHBMP_DRHBMP <- dist_full_jsd_mat[inds_Antibiotic_Drought_Herbicide_MP, inds_Drought_Herbicide_MP]
+d_ABDRHBMP_ABHBMP <- dist_full_jsd_mat[inds_Antibiotic_Drought_Herbicide_MP, inds_Antibiotic_Herbicide_MP]
+d_ABDRHBMP_ABDRHB <- dist_full_jsd_mat[inds_Antibiotic_Drought_Herbicide_MP, inds_Antibiotic_Drought_Herbicide]
+
+antibiotic_drought_herbicide_mp_distances <- data.frame(
+  treatment = c("Antibiotic_Drought_MP", "Drought_Herbicide_MP", "Antibiotic_Herbicide_MP", "Antibiotic_Drought_Herbicide"),
+  mean_dist  = c(mean(d_ABDRHBMP_ABDRMP), mean(d_ABDRHBMP_DRHBMP), mean(d_ABDRHBMP_ABHBMP), mean(d_ABDRHBMP_ABDRHB)),
+  SE         = c(sd(d_ABDRHBMP_ABDRMP, na.rm = TRUE) / sqrt(length(d_ABDRHBMP_ABDRMP)),
+                  sd(d_ABDRHBMP_DRHBMP,  na.rm = TRUE) / sqrt(length(d_ABDRHBMP_DRHBMP)), 
+                 sd(d_ABDRHBMP_ABHBMP, na.rm = TRUE) / sqrt(length(d_ABDRHBMP_ABHBMP)), 
+                 sd(d_ABDRHBMP_ABDRHB, na.rm = TRUE) / sqrt(length(d_ABDRHBMP_ABDRHB)))
+)
+
+# plot 
+all_four_jsd_distance <- ggplot(antibiotic_drought_herbicide_mp_distances, aes(x = treatment, y = mean_dist)) +
+  geom_point(size = 3, colour = "black") +
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, ymax = mean_dist + SE),
+    width = 0.2,
+    colour = "black"
+  ) +
+  labs(x = "Component Stress Treatments",
+    y = "Mean JSD Pairwise Distance") + 
+    ggtitle("Antibiotic + Drought + Herbicide + MP") +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+## Add metabolomics data 
+allfour_metabolomics_d <- readRDS("~/Desktop/FDA_Lab/Experiment1/manuscript/data/allfour_metabolomics_d.rds")
+# combine with microbiome 
+allfour_jsd_combined <- bind_rows(list(microbiome = antibiotic_drought_herbicide_mp_distances, metabolites = allfour_metabolomics_d), 
+                                 .id = "data_type")
+
+combined_allfour_jsd <- ggplot(allfour_jsd_combined, aes(x = treatment, y = mean_dist, color = data_type)) + 
+  geom_point(size = 3) + 
+  geom_errorbar(
+    aes(ymin = mean_dist - SE, 
+        ymax = mean_dist + SE), 
+    width = 0.2
+  ) + 
+  ylab("Mean JSD Pairwise Distance") + 
+  scale_color_manual(values = c("microbiome" = "#4363d8", "metabolites" = "#e6194B")) + 
+  theme(axis.title.x = element_blank()) + 
+  ggtitle("Antibiotic + Drought + Herbicide + MP") + 
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  coord_flip() + 
+  theme(legend.position = "none")
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/combined_allfour_jsd.pdf", combined_allfour_jsd, width = 6, height = 4)
+```
+
+# variance partitioning together 
+```{r}
+dist_full_exud <- phyloseq::distance(physeq_full, method = "jsd") 
+dist_full_exud_mat <- as.matrix(dist_full_exud)
+
+smd_exud <- sample_data(physeq_full)
+
+env_vars <- c("Stress_ID", "Depth.mm", "Average.Diameter.mm", "Number.of.Root.Tips", "Total.Root.Length.mm", "Root_Biomass", 
+                                             "Maximum.Number.of.Roots", "Maximum.Width.mm", "Width.to.Depth.Ratio", "Convex.Area.mm2", "Maximum.Diameter.mm", 
+                                             "Volume.mm3", "Average.Root.Orientation.deg", "Medium.Angle.Frequency")
+
+# test each variable individually 
+r2_exud_values <- sapply(env_vars, function(var) {
+  adonis2(dist_full_exud_mat ~ smd_exud[[var]], permutatations = 9999)$R2[1]
+})
+
+# rank by R2 (variation explained)
+rank_exud_env <- data.frame(
+  Variable = env_vars, 
+  R2 = r2_exud_values, 
+  P_value = sapply(env_vars, function(var) {
+    adonis2(dist_full_exud_mat ~ smd_exud[[var]], permutations = 9999)$`Pr(>F)`[1]
+  })
+) %>% arrange(desc(R2)) 
+
+rank_exud_env #R2 = % variation each variable explains 
+
+# rank for plotting
+rank_exud_env <- rank_exud_env %>% 
+  arrange(desc(R2)) %>% 
+  mutate(Variable = factor(Variable, levels = Variable), 
+         R2_pct = R2 * 100) # convert to percentage for plotting 
+
+#have this from microbiome: 
+rank_env
+
+# combine for plotting 
+combined_var_part <- bind_rows(
+  rank_env %>% mutate(dataset = "Microbiome"), 
+  rank_exud_env %>% mutate(dataset = "Exudates"), 
+  .id = "source"
+)
+
+variance_part_combined <- ggplot(combined_var_part, aes(x = R2_pct, y = Variable, fill = dataset)) + 
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +  
+  labs(x = "Variance Explained (%)") + 
+  scale_fill_manual(values = c("Microbiome" = "#4363d8", "Exudates" = "#e6194B"))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/exudates_variance_part_combined.pdf", variance_part_combined, height = 5)
+```
+
+# bipartite networks - microbiome & exudate integration 
+```{r}
+### 1. Data preparation ####
+
+# Microbiome: relative abundance + log1p(rel_abund * 1e6)
+ps_micro <- physeq_mse1.filtered3
+otu_counts <- as(otu_table(ps_micro), "matrix")
+if (!taxa_are_rows(ps_micro)) otu_counts <- t(otu_counts)
+
+# Convert to relative abundance
+otu_relab <- sweep(otu_counts, 2, colSums(otu_counts), FUN = "/")
+
+# Transform as log1p(rel_abund * 1e6)
+micro_transformed <- log1p(otu_relab * 1e6)
+
+# Filter ASVs: at least 20% prevalence
+prevalence <- rowSums(otu_counts > 0) / ncol(otu_counts)
+micro_transformed <- micro_transformed[prevalence >= 0.20, , drop = FALSE]
+
+# Metabolites: log1p + standardize feature-wise
+ps_exud <- physeq_full
+exud_counts <- as(otu_table(ps_exud), "matrix")
+if (!taxa_are_rows(ps_exud)) exud_counts <- t(exud_counts)
+
+# log1p transformation
+exud_log <- log1p(exud_counts)
+
+# Standardize feature-wise (mean=0, sd=1)
+exud_transformed <- t(scale(t(exud_log)))
+
+# Match samples
+shared_samples <- base::intersect(colnames(micro_transformed), colnames(exud_transformed))
+length(shared_samples)  # should be 166
+
+micro_mat <- micro_transformed[, shared_samples, drop = FALSE]
+exud_mat <- exud_transformed[, shared_samples, drop = FALSE]
+
+# Metadata
+meta <- as(sample_data(ps_micro), "data.frame")
+meta <- meta[shared_samples, , drop = FALSE]
+
+### 2. Kruskal-Wallis ranking ####
+
+# Make sure we're only testing ASVs that exist in micro_mat
+micro_mat_asvs <- rownames(micro_mat)
+
+# Run Kruskal-Wallis test for each ASV
+kw_results <- apply(micro_mat, 1, function(asv_abund) {
+  kruskal.test(asv_abund ~ meta$Stress_ID)
+})
+
+kw_pvals <- sapply(kw_results, function(x) x$p.value)
+kw_stats <- sapply(kw_results, function(x) x$statistic)
+
+# Create ranking data frame using rownames from micro_mat
+asv_ranks <- data.frame(
+  ASV = micro_mat_asvs,  # Use actual rownames from the matrix
+  KW_stat = kw_stats,
+  KW_pval = kw_pvals,
+  stringsAsFactors = FALSE
+) %>%
+  arrange(desc(KW_stat))
+
+# Check how many ASVs we have after prevalence filtering
+nrow(asv_ranks) # 5064
+
+# Keep top 750 or all if fewer
+n_keep <- min(750, nrow(asv_ranks))
+top_asvs <- asv_ranks$ASV[1:n_keep]
+
+# Double-check all top_asvs exist in micro_mat
+stopifnot(all(top_asvs %in% rownames(micro_mat)))
+
+micro_sel <- micro_mat[top_asvs, , drop = FALSE]
+exud_sel <- exud_mat  # all metabolites
+
+dim(micro_sel) # 750 x 166
+dim(exud_sel) # 285 x 166
+
+### 3. Binary stressor presence/absence coding ####
+
+meta <- meta %>%
+  mutate(
+    MP_present = if_else(str_detect(Stress_ID, "MP"), "Present", "Absent"),
+    Drought_present = if_else(str_detect(Stress_ID, "Drought"), "Present", "Absent"),
+    Herbicide_present = if_else(str_detect(Stress_ID, "Herbicide"), "Present", "Absent"),
+    Antibiotic_present = if_else(str_detect(Stress_ID, "Antibiotic"), "Present", "Absent")
+  )
+
+### 4. Function to build one network with proper filtering ####
+
+build_bipartite_network <- function(micro_mat, exud_mat, sample_ids, 
+                                    network_name = "global",
+                                    rho_cutoff = 0.45,
+                                    q_cutoff = 0.10,
+                                    max_edges = 500) {
+  
+  sample_ids <- base::intersect(sample_ids, base::intersect(colnames(micro_mat), colnames(exud_mat)))
+  
+  if (length(sample_ids) < 10) {
+    message(network_name, ": insufficient samples (n=", length(sample_ids), ")")
+    return(NULL)
+  }
+  
+  # Transpose for correlation (samples x features)
+  micro_sub <- t(micro_mat[, sample_ids, drop = FALSE])
+  exud_sub <- t(exud_mat[, sample_ids, drop = FALSE])
+  
+  micro_names <- colnames(micro_sub)
+  exud_names <- colnames(exud_sub)
+  
+  # Compute all pairwise correlations
+  edge_list <- list()
+  k <- 1
+  
+  for (i in seq_along(micro_names)) {
+    for (j in seq_along(exud_names)) {
+      x <- micro_sub[, i]
+      y <- exud_sub[, j]
+      
+      # Spearman correlation
+      test <- suppressWarnings(cor.test(x, y, method = "spearman", exact = FALSE))
+      
+      edge_list[[k]] <- data.frame(
+        from = micro_names[i],
+        to = exud_names[j],
+        rho = unname(test$estimate),
+        p = test$p.value,
+        stringsAsFactors = FALSE
+      )
+      k <- k + 1
+    }
+  }
+  
+  # Combine and filter
+  edges_all <- bind_rows(edge_list) %>%
+    mutate(
+      q = p.adjust(p, method = "BH"),  # Benjamini-Hochberg
+      abs_rho = abs(rho),
+      sign = if_else(rho > 0, "positive", "negative")
+    )
+  
+  # Apply thresholds
+  edges_filtered <- edges_all %>%
+    filter(!is.na(rho), abs_rho >= rho_cutoff, q <= q_cutoff) %>%
+    arrange(desc(abs_rho))
+  
+  # Cap at max_edges
+  if (nrow(edges_filtered) > max_edges) {
+    edges_filtered <- edges_filtered[1:max_edges, ]
+  }
+  
+  edges_filtered <- edges_filtered %>%
+    mutate(network = network_name, n_samples = length(sample_ids))
+  
+  # Build node table
+  if (nrow(edges_filtered) == 0) {
+    message(network_name, ": no edges passed thresholds (|rho|>=", rho_cutoff, ", q<=", q_cutoff, ")")
+    return(list(edges = edges_filtered, nodes = tibble(), n_tested = nrow(edges_all)))
+  }
+  
+  nodes <- bind_rows(
+    tibble(name = unique(edges_filtered$from), type = "ASV"),
+    tibble(name = unique(edges_filtered$to), type = "metabolite")
+  ) %>%
+    distinct() %>%
+    mutate(network = network_name)
+  
+  message(network_name, ": ", nrow(edges_filtered), " edges retained (", 
+          length(sample_ids), " samples, ", nrow(edges_all), " pairs tested)")
+  
+  list(edges = edges_filtered, nodes = nodes, n_tested = nrow(edges_all))
+}
+
+### 5. Build 8 stressor presence/absence networks + global ####
+
+network_samples <- list(
+  global = rownames(meta),
+  
+  MP_present = rownames(meta)[meta$MP_present == "Present"],
+  MP_absent = rownames(meta)[meta$MP_present == "Absent"],
+  
+  Drought_present = rownames(meta)[meta$Drought_present == "Present"],
+  Drought_absent = rownames(meta)[meta$Drought_present == "Absent"],
+  
+  Herbicide_present = rownames(meta)[meta$Herbicide_present == "Present"],
+  Herbicide_absent = rownames(meta)[meta$Herbicide_present == "Absent"],
+  
+  Antibiotic_present = rownames(meta)[meta$Antibiotic_present == "Present"],
+  Antibiotic_absent = rownames(meta)[meta$Antibiotic_present == "Absent"]
+)
+
+# Build networks at rho >= 0.45, q <= 0.10
+network_results_045 <- lapply(names(network_samples), function(nm) {
+  build_bipartite_network(
+    micro_mat = micro_sel,
+    exud_mat = exud_sel,
+    sample_ids = network_samples[[nm]],
+    network_name = nm,
+    rho_cutoff = 0.45,
+    q_cutoff = 0.10,
+    max_edges = 500
+  )
+})
+names(network_results_045) <- names(network_samples)
+
+# Combine edges and nodes
+all_edges_045 <- bind_rows(lapply(network_results_045, function(x) if(!is.null(x)) x$edges else NULL))
+all_nodes_045 <- bind_rows(lapply(network_results_045, function(x) if(!is.null(x)) x$nodes else NULL))
+
+write.csv(all_edges_045, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/network_edges_rho045.csv", row.names = FALSE)
+write.csv(all_nodes_045, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/network_nodes_rho045.csv", row.names = FALSE)
+
+### 6. Threshold sensitivity analysis (0.35, 0.40, 0.45, 0.50) ####
+
+thresholds <- c(0.35, 0.40, 0.45, 0.50)
+sensitivity_results <- list()
+
+for (rho_thresh in thresholds) {
+  message("\n=== Building networks at rho >= ", rho_thresh, " ===")
+  
+  results <- lapply(names(network_samples), function(nm) {
+    build_bipartite_network(
+      micro_mat = micro_sel,
+      exud_mat = exud_sel,
+      sample_ids = network_samples[[nm]],
+      network_name = nm,
+      rho_cutoff = rho_thresh,
+      q_cutoff = 0.10,
+      max_edges = 500
+    )
+  })
+  names(results) <- names(network_samples)
+  
+  sensitivity_results[[paste0("rho", rho_thresh)]] <- results
+}
+
+# Summary table
+sensitivity_summary <- map_dfr(names(sensitivity_results), function(thresh_name) {
+  results <- sensitivity_results[[thresh_name]]
+  map_dfr(names(results), function(net_name) {
+    res <- results[[net_name]]
+    if (is.null(res)) return(NULL)
+    data.frame(
+      threshold = thresh_name,
+      network = net_name,
+      n_edges = nrow(res$edges),
+      n_nodes = nrow(res$nodes),
+      n_tested = res$n_tested
+    )
+  })
+})
+
+write.csv(sensitivity_summary, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/network_threshold_sensitivity.csv", row.names = FALSE)
+
+### 7. Global network with bootstrap (for stable edges) ####
+
+bootstrap_global_network <- function(micro_mat, exud_mat, sample_ids, 
+                                     rho_cutoff = 0.35, q_cutoff = 0.05, 
+                                     n_boot = 100, boot_cutoff = 0.75) {
+  
+  # Build primary network
+  primary_net <- build_bipartite_network(
+    micro_mat, exud_mat, sample_ids,
+    network_name = "global_primary",
+    rho_cutoff = rho_cutoff,
+    q_cutoff = q_cutoff,
+    max_edges = Inf
+  )
+  
+  if (is.null(primary_net) || nrow(primary_net$edges) == 0) {
+    message("No edges in primary global network")
+    return(NULL)
+  }
+  
+  # Bootstrap: resample samples with replacement
+  edge_pairs <- paste(primary_net$edges$from, primary_net$edges$to, sep = "~~~")
+  boot_counts <- rep(0, length(edge_pairs))
+  names(boot_counts) <- edge_pairs
+  
+  message("Running ", n_boot, " bootstrap replicates...")
+  for (b in 1:n_boot) {
+    boot_samples <- sample(sample_ids, replace = TRUE)
+    
+    boot_net <- build_bipartite_network(
+      micro_mat, exud_mat, boot_samples,
+      network_name = paste0("boot_", b),
+      rho_cutoff = rho_cutoff,
+      q_cutoff = q_cutoff,
+      max_edges = Inf
+    )
+    
+    if (!is.null(boot_net) && nrow(boot_net$edges) > 0) {
+      boot_edge_pairs <- paste(boot_net$edges$from, boot_net$edges$to, sep = "~~~")
+      boot_counts[boot_edge_pairs] <- boot_counts[boot_edge_pairs] + 1
+    }
+  }
+  
+  # Add bootstrap support to primary edges
+  primary_net$edges <- primary_net$edges %>%
+    mutate(
+      edge_pair = paste(from, to, sep = "~~~"),
+      boot_support = boot_counts[edge_pair] / n_boot
+    ) %>%
+    select(-edge_pair) %>%
+    arrange(desc(boot_support), desc(abs_rho))
+  
+  # Identify stable edges
+  stable_edges <- primary_net$edges %>%
+    filter(boot_support >= boot_cutoff)
+  
+  message("Global network: ", nrow(primary_net$edges), " total edges, ", 
+          nrow(stable_edges), " stable (bootstrap >= ", boot_cutoff, ")")
+  
+  list(
+    all_edges = primary_net$edges,
+    stable_edges = stable_edges,
+    nodes = primary_net$nodes
+  )
+}
+
+global_boot <- bootstrap_global_network(
+  micro_sel, exud_sel, rownames(meta),
+  rho_cutoff = 0.35, q_cutoff = 0.05, n_boot = 100, boot_cutoff = 0.75
+)
+
+write.csv(global_boot$stable_edges, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/global_stable_edges.csv", row.names = FALSE)
+write.csv(global_boot$all_edges, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/global_all_edges.csv", row.names = FALSE)
+
+### 8. Edge preservation analysis ####
+
+# For each stable global edge, check if it appears in stress-specific networks
+if (!is.null(global_boot) && nrow(global_boot$stable_edges) > 0) {
+  
+  stable_edge_pairs <- paste(global_boot$stable_edges$from, 
+                             global_boot$stable_edges$to, sep = "~~~")
+  
+  preservation_matrix <- matrix(0, nrow = length(stable_edge_pairs), 
+                                ncol = length(network_results_045))
+  rownames(preservation_matrix) <- stable_edge_pairs
+  colnames(preservation_matrix) <- names(network_results_045)
+  
+  for (net_name in names(network_results_045)) {
+    net <- network_results_045[[net_name]]
+    if (!is.null(net) && nrow(net$edges) > 0) {
+      net_edge_pairs <- paste(net$edges$from, net$edges$to, sep = "~~~")
+      preservation_matrix[stable_edge_pairs %in% net_edge_pairs, net_name] <- 1
+    }
+  }
+  
+  preservation_df <- as.data.frame(preservation_matrix) %>%
+    rownames_to_column("edge") %>%
+    separate(edge, into = c("ASV", "metabolite"), sep = "~~~")
+  
+  write.csv(preservation_df, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/edge_preservation_across_networks.csv", row.names = FALSE)
+}
+
+### 9. Plot one network example ####
+
+plot_bipartite_network <- function(edges_df, nodes_df, title_text = "Network") {
+  
+  if (nrow(edges_df) == 0 || nrow(nodes_df) == 0) {
+    return(ggplot() + 
+             annotate("text", x = 0, y = 0, label = paste(title_text, "\nNo edges")) +
+             theme_void())
+  }
+  
+  graph_tbl <- tbl_graph(nodes = nodes_df, edges = edges_df, directed = FALSE)
+  
+  ggraph(graph_tbl, layout = "fr") +
+    geom_edge_link(aes(color = sign, width = abs_rho), alpha = 0.6) +
+    geom_node_point(aes(color = type, size = type)) +
+    geom_node_text(aes(label = name), repel = TRUE, size = 2.5, max.overlaps = 20) +
+    scale_edge_color_manual(values = c(positive = "#e6194B", negative = "#4363d8")) +
+    scale_color_manual(values = c(ASV = "#2ca25f", metabolite = "#8856a7")) +
+    scale_size_manual(values = c(ASV = 3, metabolite = 4)) +
+    scale_edge_width(range = c(0.5, 2)) +
+    labs(title = title_text) +
+    theme_void() +
+    theme(legend.position = "right")
+}
+
+# Plot global network
+if (!is.null(global_boot) && nrow(global_boot$stable_edges) > 0) {
+  global_nodes <- bind_rows(
+    tibble(name = unique(global_boot$stable_edges$from), type = "ASV"),
+    tibble(name = unique(global_boot$stable_edges$to), type = "metabolite")
+  )
+  
+  p_global <- plot_bipartite_network(
+    global_boot$stable_edges, global_nodes, 
+    "Global Stable Network (bootstrap ≥ 0.75)"
+  )
+  
+  ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/network_global_stable.pdf",
+         p_global, width = 12, height = 10)
+}
+
+# Plot stress-specific networks
+for (net_name in names(network_results_045)) {
+  net <- network_results_045[[net_name]]
+  if (!is.null(net) && nrow(net$edges) > 0) {
+    p <- plot_bipartite_network(net$edges, net$nodes, net_name)
+    ggsave(paste0("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/network_", net_name, ".pdf"),
+           p, width = 10, height = 8)
+  }
+}
+
+# this worked, but the labeling is crazy!
+```
+
+```{r}
+# addressing the labels in the networks 
+
+# asv taxonomy labels 
+tax_micro <- as.data.frame(tax_table(physeq_mse1.filtered3), stringsAsFactors = FALSE) %>%
+  rownames_to_column("name")
+
+clean_tax_string <- function(x) {
+  x <- as.character(x)
+  x[x %in% c(NA, "", "NA", "uncultured", "unclassified", "Unknown")] <- NA
+  x
+}
+
+tax_micro <- tax_micro %>%
+  mutate(
+    across(c(Kingdom, Phylum, Class, Order, Family, Genus), clean_tax_string),
+    asv_label = case_when(
+      !is.na(Genus)   ~ paste0("g_", Genus),
+      !is.na(Family)  ~ paste0("f_", Family),
+      !is.na(Order)   ~ paste0("o_", Order),
+      !is.na(Class)   ~ paste0("c_", Class),
+      !is.na(Phylum)  ~ paste0("p_", Phylum),
+      TRUE            ~ paste0("ASV_", str_sub(name, 1, 10), "…")
+    )
+  )
+
+# metabolite labels 
+tax_met <- as.data.frame(tax_table(physeq_full), stringsAsFactors = FALSE) %>%
+  rownames_to_column("name")
+
+# Inspect available annotation columns first
+colnames(tax_met)
+
+tax_met <- tax_met %>%
+  mutate(
+    met_annot = case_when(
+      "Annotation" %in% colnames(.) ~ as.character(Annotation),
+      "superclass" %in% colnames(.)    ~ as.character(superclass),
+      "class" %in% colnames(.)         ~ as.character(class),
+      "subclass" %in% colnames(.)    ~ as.character(subclass),
+      TRUE ~ NA_character_
+    ),
+    met_annot = if_else(met_annot %in% c("", "NA", "Unknown", "unclassified"), NA_character_, met_annot),
+    met_label = case_when(
+      !is.na(met_annot) ~ met_annot,
+      TRUE ~ str_replace(name, "_", "\n")  # or use a shorter fallback below
+      # TRUE ~ paste0("Met_", row_number())
+    )
+  )
+
+# merge labels into nodes 
+node_labels <- bind_rows(
+  tax_micro %>% select(name, label = asv_label) %>% mutate(type = "ASV"),
+  tax_met   %>% select(name, label = met_label) %>% mutate(type = "metabolite")
+)
+
+# example for one network
+nodes_labeled <- net$nodes %>%
+  left_join(node_labels, by = c("name", "type")) %>%
+  mutate(
+    label = if_else(is.na(label), name, label)
+  )
+
+# changing the plotting function so that not EVERY node is labeled (i.e., only label nodes with a high degree, metabolites that are actually annotated, and top 10-20 most connected ASVs)
+plot_bipartite_network <- function(edges_df, nodes_df, title_text = "Network",
+                                   label_top_n = 20) {
+
+  if (nrow(edges_df) == 0 || nrow(nodes_df) == 0) {
+    return(
+      ggplot() +
+        annotate("text", x = 0, y = 0, label = paste(title_text, "\nNo edges")) +
+        theme_void()
+    )
+  }
+
+  graph_tbl <- tbl_graph(nodes = nodes_df, edges = edges_df, directed = FALSE) %>%
+    activate(nodes) %>%
+    mutate(degree = centrality_degree()) %>%
+    mutate(show_label = rank(-degree, ties.method = "first") <= label_top_n)
+
+  ggraph(graph_tbl, layout = "fr") +
+    geom_edge_link(aes(color = sign, width = abs_rho), alpha = 0.35) +
+    geom_node_point(aes(color = type, size = degree)) +
+    geom_node_text(
+      aes(label = ifelse(show_label, label, NA)),
+      repel = TRUE,
+      size = 2.8,
+      max.overlaps = Inf
+    ) +
+    scale_edge_color_manual(values = c(positive = "#e6194B", negative = "#4363d8")) +
+    scale_color_manual(values = c(ASV = "#2ca25f", metabolite = "#8856a7")) +
+    scale_edge_width(range = c(0.4, 1.8)) +
+    labs(title = title_text) +
+    theme_void() +
+    theme(legend.position = "right")
+}
+
+# Plot global network
+if (!is.null(global_boot) && nrow(global_boot$stable_edges) > 0) {
+  global_nodes <- bind_rows(
+    tibble(name = unique(global_boot$stable_edges$from), type = "ASV"),
+    tibble(name = unique(global_boot$stable_edges$to), type = "metabolite")
+  )
+  
+  global_nodes_labeled <- global_nodes %>%
+    left_join(node_labels, by = c("name", "type")) %>%
+    mutate(label = if_else(is.na(label), name, label))
+  
+  p_global <- plot_bipartite_network(
+    edges_df = global_boot$stable_edges,
+    nodes_df = global_nodes_labeled,  # use the labeled version
+    title_text = "Global Stable Network (bootstrap ≥ 0.75)",
+    label_top_n = 30
+  )
+  
+  ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/network_global_stable.pdf",
+         p_global, width = 12, height = 10)
+}
+
+# Plot stress-specific networks
+for (net_name in names(network_results_045)) {
+  net <- network_results_045[[net_name]]
+  if (!is.null(net) && nrow(net$edges) > 0) {
+    nodes_labeled <- net$nodes %>% 
+      left_join(node_labels, by = c("name", "type")) %>% 
+      mutate(label = if_else(is.na(label), name, label))
+    p <- plot_bipartite_network(
+      edges_df = net$edges,
+      nodes_df = nodes_labeled, 
+      title_text = net_name, 
+      label_top_n = 20
+    )
+    ggsave(paste0("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/network_", net_name, ".pdf"),
+           p, width = 10, height = 8)
+  }
+}
+```
+
+
+```{r}
+### Network summary statistics ####
+
+network_stats <- map_dfr(names(network_results_045), function(nm) {
+  net <- network_results_045[[nm]]
+  
+  if (is.null(net) || nrow(net$edges) == 0) {
+    return(data.frame(
+      network = nm,
+      n_samples = NA,
+      n_edges = 0,
+      n_nodes = 0,
+      n_ASVs = 0,
+      n_metabolites = 0,
+      n_positive = 0,
+      n_negative = 0,
+      mean_abs_rho = NA,
+      median_abs_rho = NA,
+      density = NA
+    ))
+  }
+  
+  n_ASVs <- sum(net$nodes$type == "ASV")
+  n_mets <- sum(net$nodes$type == "metabolite")
+  
+  # Network density = actual edges / possible edges
+  # For bipartite: max edges = n_ASVs * n_metabolites
+  max_edges <- n_ASVs * n_mets
+  density <- nrow(net$edges) / max_edges
+  
+  data.frame(
+    network = nm,
+    n_samples = unique(net$edges$n_samples)[1],
+    n_edges = nrow(net$edges),
+    n_nodes = nrow(net$nodes),
+    n_ASVs = n_ASVs,
+    n_metabolites = n_mets,
+    n_positive = sum(net$edges$sign == "positive"),
+    n_negative = sum(net$edges$sign == "negative"),
+    mean_abs_rho = mean(net$edges$abs_rho),
+    median_abs_rho = median(net$edges$abs_rho),
+    density = density
+  )
+})
+
+write.csv(network_stats, "~/Desktop/FDA_Lab/Experiment1/manuscript/data/network_summary_stats.csv", row.names = FALSE)
+
+
+# Separate global from stress-specific
+network_stats <- network_stats %>%
+  mutate(
+    network_type = if_else(network == "global", "Global", "Stress-specific"),
+    stressor = str_remove(network, "_present|_absent"),
+    presence = case_when(
+      network == "global" ~ "Global",
+      str_detect(network, "_present") ~ "Present",
+      str_detect(network, "_absent") ~ "Absent",
+      TRUE ~ NA_character_
+    )
+  )
+
+# Bar chart: edge count by stressor presence/absence
+p_edge_count <- network_stats %>%
+  filter(network != "global") %>%
+  ggplot(aes(x = stressor, y = n_edges, fill = presence)) +
+  geom_col(position = "dodge") +
+  geom_hline(yintercept = network_stats$n_edges[network_stats$network == "global"],
+             linetype = "dashed", color = "gray40") +
+  annotate("text", x = 0.5, y = network_stats$n_edges[network_stats$network == "global"] + 20,
+           label = "Global", size = 3, color = "gray40") +
+  scale_fill_manual(values = c(Present = "#e6194B", Absent = "#4363d8")) +
+  labs(x = "Stressor", y = "Number of edges", fill = "Stressor status",
+       title = "Network edge count by stressor presence/absence") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/network_edge_count_comparison.pdf",
+       p_edge_count, width = 8, height = 5)
+# note that these edges are only between ASVs and metabolites (that's what a bipartite network is; every edge connects ASV to metabolite)
+
+# Node comparision 
+# Reshape from wide to long
+# Correct reshaping - only pivot the specific node type columns
+network_stats_long <- network_stats %>%
+  pivot_longer(
+    cols = c(n_ASVs, n_metabolites),  # Only these columns
+    names_to = "node_type",
+    values_to = "count"
+  )
+
+library(ggpattern)
+
+network_stats_long %>% 
+  filter(network != "global") %>% 
+  ggplot(aes(x = stressor, y = count, fill = presence, pattern = node_type)) + 
+  geom_col_pattern(
+    position = position_dodge2(preserve = "single"), 
+    color = "black", 
+    pattern_fill = "black", 
+    pattern_angle = 45, 
+    pattern_density = 0.1, 
+    pattern_spacing = 0.025, 
+    pattern_key_scale_factor = 0.6,
+  ) +
+  scale_fill_manual(values = c(Present = "#e6194B", Absent = "#4363d8")) +
+  scale_pattern_manual(
+    values = c(n_ASVs = "stripe", n_metabolites = "none"),
+    labels = c("ASVs", "Metabolites")
+  )
+
+p_nodes <- network_stats_long %>% 
+  filter(network != "global") %>% 
+  ggplot(aes(x = interaction(stressor, presence), y = count, 
+             fill = presence, 
+             pattern = node_type)) + 
+  geom_col_pattern(
+    position = "stack",
+    color = "black", 
+    pattern_fill = "black", 
+    pattern_angle = 45, 
+    pattern_density = 0.1, 
+    pattern_spacing = 0.025,
+    pattern_key_scale_factor = 0.6,
+    width = 0.7
+  ) +
+  scale_fill_manual(values = c(Present = "#e6194B", Absent = "#4363d8")) +
+  scale_pattern_manual(
+    values = c(n_ASVs = "stripe", n_metabolites = "none"),
+    labels = c("ASVs", "Metabolites")
+  ) +
+  scale_x_discrete(labels = function(x) gsub("\\..*", "", x)) +  # Clean x-axis labels
+  labs(x = "Stressor Condition", y = "Number of Nodes", 
+       pattern = "Node Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/network_node_comparison.pdf", p_nodes)
+
+
+
+# Density comparison
+p_density <- network_stats %>%
+  filter(network != "global") %>%
+  ggplot(aes(x = stressor, y = density, fill = presence)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c(Present = "#e6194B", Absent = "#4363d8")) +
+  labs(x = "Stressor", y = "Network density", fill = "Stressor status") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/network_density_comparison.pdf",
+#       p_density, width = 8, height = 5)
+
+# Correlation strength comparison
+p_strength <- network_stats %>%
+  filter(network != "global") %>%
+  ggplot(aes(x = stressor, y = mean_abs_rho, fill = presence)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c(Present = "#e6194B", Absent = "#4363d8")) +
+  labs(x = "Stressor", y = "Mean |ρ|", fill = "Stressor status",
+       title = "Average edge strength") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/network_edge_strength_comparison.pdf",
+#       p_strength, width = 8, height = 5)
+
+### Edge overlap analysis #### 
+# (compare which edges are shared between networks) # 
+
+# Function to compute edge overlap between two networks
+compute_edge_overlap <- function(edges1, edges2, name1, name2) {
+  
+  if (nrow(edges1) == 0 || nrow(edges2) == 0) {
+    return(data.frame(
+      network1 = name1,
+      network2 = name2,
+      shared_edges = 0,
+      edges1_only = nrow(edges1),
+      edges2_only = nrow(edges2),
+      jaccard = 0
+    ))
+  }
+  
+  # Create edge identifiers (ignoring direction for bipartite)
+  edges1_ids <- paste(edges1$from, edges1$to, sep = "~~~")
+  edges2_ids <- paste(edges2$from, edges2$to, sep = "~~~")
+  
+  shared <- length(base::intersect(edges1_ids, edges2_ids))
+  union_size <- length(base::union(edges1_ids, edges2_ids))
+  
+  jaccard <- shared / union_size
+  
+  data.frame(
+    network1 = name1,
+    network2 = name2,
+    shared_edges = shared,
+    edges1_only = length(base::setdiff(edges1_ids, edges2_ids)),
+    edges2_only = length(base::setdiff(edges2_ids, edges1_ids)),
+    total_union = union_size,
+    jaccard = jaccard
+  )
+}
+
+# Compare present vs absent for each stressor
+stressors <- c("MP", "Drought", "Herbicide", "Antibiotic")
+
+presence_absence_overlap <- map_dfr(stressors, function(stress) {
+  net_present <- network_results_045[[paste0(stress, "_present")]]
+  net_absent <- network_results_045[[paste0(stress, "_absent")]]
+  
+  if (is.null(net_present) || is.null(net_absent)) return(NULL)
+  
+  compute_edge_overlap(
+    net_present$edges, net_absent$edges,
+    paste0(stress, "_present"), paste0(stress, "_absent")
+  ) %>%
+    mutate(stressor = stress)
+})
+
+write.csv(presence_absence_overlap, 
+          "~/Desktop/FDA_Lab/Experiment1/manuscript/data/network_presence_absence_overlap.csv",
+          row.names = FALSE)
+
+# Plot Jaccard similarity
+p_jaccard <- ggplot(presence_absence_overlap, aes(x = stressor, y = jaccard)) +
+  geom_col(fill = "#3cb44b") +
+  labs(x = "Stressor", y = "Jaccard similarity",
+       title = "Edge overlap: present vs. absent networks") +
+  theme_bw()
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/network_jaccard_overlap.pdf",
+       p_jaccard, width = 6, height = 4)
+```
