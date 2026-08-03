@@ -1,0 +1,217 @@
+---
+title: "MSE1_16SProcessing"
+author: "Natalie F"
+date: "2025-11-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+#0. Initial Library
+```{r, include=FALSE}
+library(rlang)
+#if (!require("BiocManager", quietly = TRUE))
+ #   install.packages("BiocManager")
+
+#BiocManager::install("dada2")
+library(dada2); packageVersion("dada2") #[1] '1.38.0'
+library(Biostrings)
+library(ShortRead)
+library(tidyverse)
+```
+
+
+#1. Taxonomy inspect
+```{r}
+load("~/Desktop/FDA_Lab/Experiment1/data/dada2_env_taxa_genus.RData")
+taxa.print <- taxa # Removing sequence rownames for display only
+rownames(taxa.print) <- NULL
+head(taxa.print)
+```
+
+Export
+```{r}
+write.csv(seqtab.nochim, file = "~/Desktop/FDA_Lab/Experiment1/MicrobiomeProcessing4/asv_table_16S.csv")
+write.csv(taxa, file = "~/Desktop/FDA_Lab/Experiment1/MicrobiomeProcessing4/tax_table_16S.csv")
+save.image("~/Desktop/FDA_Lab/Experiment1/MicrobiomeProcessing4/dada2_env_taxa_genus_complete.RData")
+```
+
+#create phyloseq object
+Library
+```{r}
+library(phyloseq); packageVersion("phyloseq") # v 1.54.2
+library(readr)
+```
+
+# need to extract the OTU table from the phyloseq object that has been filtered (phyloseq_clean2) so that the number of taxa between the OTU table and taxa table match :) 
+```{r}
+#otu_for_spp <- otu_table(phyloseq_clean2)
+```
+
+
+#1. Input the files and format
+```{r}
+#load("~/Desktop/FDA_Lab/Experiment1/MicrobiomeProcessing4/dada2_env_taxa_genus_complete.RData")
+
+# Read in taxa asv table
+asv <- seqtab.nochim
+asv <- t(asv) # transpose (rows <-> columns)  
+asv
+dim(asv); nrow(asv); ncol(asv) #Outcome: [1] n of rows + columns [1] n of rows [1] n of columns
+
+# Read taxonomy table 
+tax <- taxa #file of taxonomy
+taxa_names(tax) <- paste0("Seq", seq(ntaxa(tax))) #rename sequences by simpler names
+
+# Transform the taxa table to matrix
+dim(tax); ncol(taxa); nrow(tax) # sequences are rows, taxonomic ranks are columns (6)
+
+tax_mat <- as.matrix(tax)
+dim(tax_mat); ncol(tax_mat); nrow(tax_mat) 
+
+# Check if asv and tax_mat have the same number of taxa
+nrow(asv); nrow(tax_mat) # yes! 
+```
+
+#2. Format
+```{r}
+asv <- t(asv) # transpose (rows <-> columns) 
+samples.out <- rownames(asv)
+subject <- sapply(strsplit(samples.out, "D"), `[`, 1)
+
+## Create SAMPLE DATAFRAME ##
+#Preparing samdf = sample dataframe with features of samples, i.e. site, season, depth, etc
+max=read.csv("~/Desktop/FDA_Lab/Experiment1/data/FINAL_METADATA_SHEET.csv", header = TRUE )
+
+saveRDS(max, file = "samdf.rds")
+
+samdf_phy <- readRDS("samdf.rds")
+nrow(samdf_phy) #check number of rows
+
+#remove sample ID 59 and 114 (they died during the experiment and have no data associated with them) # do this later ? 
+samdf_phy2 <- samdf_phy[-c(59, 114), ]
+
+# make sure rownames of metadata match column names of ASV table 
+library(data.table)
+setorder(samdf_phy2, cols="ID")
+samdf_phy2
+samdf_final=cbind(subject, samdf_phy2, rownames=1)
+str(asv)
+```
+
+#3. Create phyloseq class object ##
+#with asv table, taxa table and sample metadata
+```{r}
+physeq <- phyloseq(otu_table(asv, taxa_are_rows = FALSE), # samples are rows
+                   sample_data(samdf_phy2), 
+                   tax_table(tax))
+```
+
+```{r}
+save(physeq, file="~/Desktop/FDA_Lab/Experiment1/MicrobiomeProcessing4/phyloseq_original.Rdata")
+#load("~/Desktop/FDA_Lab/Experiment1/MicrobiomeProcessing4/phyloseq_original.Rdata")
+sum(sample_sums(physeq)) #23229069 reads across all samples before filtering
+ntaxa(physeq) #259076 ASVs before filtering
+```
+
+Remove Chroloplast and or mitochondrial taxa
+```{r}
+phyloseq_clean <- subset_taxa(physeq, Family!= "Mitochondria" | is.na(Family) & Order!="Chloroplast" | is.na(Order))
+sum(sample_sums(phyloseq_clean)) #23023036 reads across all samples 
+ntaxa(phyloseq_clean) #255370 ASVs
+```
+
+#3. Retain just assigned Bacteria Kingdom
+```{r}
+phyloseq_clean<-subset_taxa(phyloseq_clean, Kingdom == "Bacteria")
+sum(sample_sums(phyloseq_clean)) #21703148 
+ntaxa(phyloseq_clean) #253015 ASVs
+```
+
+#4. Remove ASV with 2 or less reads - we consider a missreading.
+```{r}
+phyloseq_clean2 <- prune_taxa(taxa_sums(phyloseq_clean)>2, phyloseq_clean)
+sum(sample_sums(phyloseq_clean2)) #21528028 reads 
+min(sample_sums(phyloseq_clean2)) # sample with the minimum # of reads: 63 reads (this is sample ID 47) 
+```
+
+```{r}
+#Use prevalence (number of samples where an ASV is present) instead of total counts. Keep ASVs present in ≥7 samples:
+
+ps <- phyloseq_clean2
+margin <- ifelse(taxa_are_rows(ps), 1, 2)               # 1 = taxa rows, 2 = taxa cols
+prev   <- apply(otu_table(ps) > 0, margin, sum)         # number of samples with >0
+phyloseq_clean2 <- prune_taxa(prev > 7, ps)            # drop ASVs seen in less than 7 samples
+
+ntaxa(phyloseq_clean2) #12313 ASVs 
+sum(sample_sums(phyloseq_clean2)) # 20,325,685 reads 
+
+save(phyloseq_clean2, file="~/Desktop/FDA_Lab/Experiment1/MicrobiomeProcessing4/phyloseq_clean.Rdata")
+
+#That removes any ASV that appears in less than 7 samples (regardless of its read count).
+```
+
+#5. Plot rarefaction curve 
+```{r}
+library(vegan) #v 2.7-3
+#rare <-rarecurve(otu_table(physeq), step=50, cex=0.5)
+
+tab <- otu_table(phyloseq_clean2)
+
+class(tab) <- "matrix"
+
+#tab <- t(tab)
+rare <-rarecurve(tab, step=50, cex=0.5, label = T)
+```
+
+#6. rarefy
+Total dataset
+pull out otu_table and rarefy as per P. Schloss (2023)
+```{r}
+selected_rare <- phyloseq_clean2
+
+#select the 
+sort(sample_sums(phyloseq_clean2)) #50,000
+#rarefy at 50,000; IDs 180, 179, 178, 181, 183 are negative controls and will be removed from dataset anyway
+
+#rarefy
+#install.packages('devtools')
+#devtools::install_github("GuillemSalazar/EcolUtils")
+require(EcolUtils)
+
+#reads removed <=4
+asv_tab_reads <- data.frame(otu_table(selected_rare)) #extract
+asv_tab_rare <- rrarefy.perm(x = asv_tab_reads , sample = 50000, n = 1000, round.out = T) #use n=1000
+
+rowSums(asv_tab_rare)
+
+#update otu table in phylsoeq object
+otu_table(selected_rare) <-  otu_table(asv_tab_rare, taxa_are_rows = F)
+
+sort(sample_sums(selected_rare))
+
+#compare two permuted otu table to ensure it worked.
+View(otu_table(phyloseq_clean2)[1:10, 1:10])
+View(otu_table(selected_rare)[1:10, 1:10])
+ 
+```
+
+
+# Export
+```{r}
+physeq_rare <- selected_rare
+
+save(physeq_rare, file="~/Desktop/FDA_Lab/Experiment1/MicrobiomeProcessing3/phyloseq_rarefied.Rdata")
+```
+
+
+
+
+
+
+
+
+

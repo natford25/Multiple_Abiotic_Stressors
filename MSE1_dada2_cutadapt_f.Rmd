@@ -1,0 +1,309 @@
+---
+title: "MSE1_dada2_cutadapt"
+output: html_document
+date: "2025-11-03"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Step 1: Initial Library
+```{r, include=FALSE}
+library(rlang)
+#if (!require("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+
+#BiocManager::install("dada2")
+library(dada2); packageVersion("dada2") #[1] '1.38.0'
+library(Biostrings)
+library(ShortRead)
+library(tidyverse)
+```
+
+Step 2: Define the following path variable so that it points to the extracted directory on your machine: 
+```{r}
+path <- "~/Desktop/FDA_Lab/Experiment1/sequencing/raw_reads/"
+#Check path
+list.files(path)
+path
+```
+
+Step 3: Read the names of fastq files 
+```{r}
+# Forward and reverse fastq filenames have format: PROJECT_RH_SAMPLEID_16S_R1_001.fastq and PROJECT_RH_SAMPLEID_16S_R2_001.fastq
+fnFs <- sort(list.files(path, pattern="_R1_001.fastq", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern="_R2_001.fastq", full.names = TRUE))
+# Extract sample names, assuming filenames have format: PROJECT_RH_SAMPLEID_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 3)
+
+# Inspect read quality profiles - to see if they are corrupted
+#The sequencing is 2x300 bp
+plotQualityProfile(fnFs[1:2]) # not corrupted
+plotQualityProfile(fnRs[1:2]) # not corrupted
+```
+# On terminal - remove the Poly-G tails
+--- install
+Cutadapt will be needed for the G-tails from NextSeq
+But before, install on terminal:
+$ conda create -n dada2 python=3.10 #only have to do this once
+$ conda activate dada2
+$ conda install -c conda-forge -c bioconda cutadapt
+$ cutadapt --version
+$ conda install -c bioconda dada2
+
+--- check G-tails
+conda activate dada2
+cd Desktop/GitProjects/syncoms_experiment/data/Nextseq2000/fastq
+$ run the following on bash
+```{r}
+# config
+N=10000
+MIN_TAIL=10
+mkdir -p polyG_checks
+
+# choose decompressor (macOS often uses gzcat)
+CAT=$(command -v gzcat || command -v zcat)
+
+polyG_check() {
+  fq="$1"
+  "$CAT" "$fq" 2>/dev/null | \
+  awk -v N="$N" -v MIN="$MIN_TAIL" -v FILE="$(basename "$fq")" '
+    NR%4==2 {
+      gsub(/\r/,"");                # strip CR if present
+      seq = toupper($0);            # match like your R (uppercase)
+      if (match(seq, /G+$/)) len = RLENGTH; else len = 0;
+      t[len]++; total++;
+      if (total >= N) exit
+    }
+    END {
+      with=0; maxg=0;
+      for (k in t) {
+        kk = k + 0
+        if (kk >= MIN) with += t[k]
+        if (kk > maxg) maxg = kk
+      }
+      pct = (total>0) ? 100*with/total : 0
+      printf("file\ttotal_reads\twith_polyG\tpct_polyG\tmax_G_tail\n");
+      printf("%s\t%d\t%d\t%.2f\t%d\n", FILE, total, with, pct, maxg);
+    }' > "polyG_checks/$(basename "$fq").tsv"
+}
+
+export -f polyG_check
+export CAT N MIN_TAIL
+
+# run on all fastqs
+for f in *_R1_001.fastq *_R2_001.fastq; do
+  polyG_check "$f" &
+done
+wait
+
+# peek
+head -n 2 polyG_checks/*.tsv
+```
+--- remove Poly G
+```{r}
+CUTADAPT="/Users/nef5181/miniconda3/envs/dada2/bin/cutadapt"
+mkdir -p cutadapt
+
+for r1 in *_R1_001.fastq; do
+  r2="${r1/_R1_/_R2_}"                   # MSE1_RH_1_16S_S147_R2_001.fastq
+  sample="$(printf '%s\n' "$r1" | cut -d'_' -f3)"       # sample ID token is after the first two underscores
+  out1="cutadapt/${sample}_R1_cut.fastq"
+  out2="cutadapt/${sample}_R2_cut.fastq"
+  logf="cutadapt/${sample}_polyG.log"
+
+  "$CUTADAPT" --nextseq-trim=20 --max-n 0 --minimum-length 35 \
+    -o "$out1" -p "$out2" \
+    "$r1" "$r2" > "$logf" 2>&1
+
+  echo "Done: $sample"
+done
+
+```
+
+
+Step 4: in R: Check that poly-G tails were removed by cutadapt (on terminal)
+```{r}
+path_g <- file.path(path, "cutadapt")   # <- where the *_cut.fastq live
+
+fnFs.g <- sort(list.files(path_g, pattern = "_R1_cut\\.fastq$", full.names = TRUE))
+fnRs.g <- sort(list.files(path_g, pattern = "_R2_cut\\.fastq$", full.names = TRUE))
+
+length(fnFs.g); length(fnRs.g)          # must be equal and > 0
+
+# Inspect read quality profiles - to see if they are corrupted
+#The sequencing is 2x300 bp
+plotQualityProfile(fnFs.g[2]) # not corrupted
+plotQualityProfile(fnRs.g[2]) # not corrupted
+
+# Note: The first file that I created has no sample ID and no associated data, but I think all other files look good 
+```
+
+# On terminal - Check if the Poly-G tails were removed
+
+Check whether it is completed and correct
+```{r}
+cd cutadapt
+N=10000
+MIN_TAIL=10
+mkdir -p polyG_checks
+
+# choose decompressor (macOS often uses gzcat)
+CAT=$(command -v gzcat || command -v zcat)
+
+polyG_check() {
+  fq="$1"
+  "$CAT" "$fq" 2>/dev/null | \
+  awk -v N="$N" -v MIN="$MIN_TAIL" -v FILE="$(basename "$fq")" '
+    NR%4==2 {
+      gsub(/\r/,"");                # strip CR if present
+      seq = toupper($0);            # match like your R (uppercase)
+      if (match(seq, /G+$/)) len = RLENGTH; else len = 0;
+      t[len]++; total++;
+      if (total >= N) exit
+    }
+    END {
+      with=0; maxg=0;
+      for (k in t) {
+        kk = k + 0
+        if (kk >= MIN) with += t[k]
+        if (kk > maxg) maxg = kk
+      }
+      pct = (total>0) ? 100*with/total : 0
+      printf("file\ttotal_reads\twith_polyG\tpct_polyG\tmax_G_tail\n");
+      printf("%s\t%d\t%d\t%.2f\t%d\n", FILE, total, with, pct, maxg);
+    }' > "polyG_checks/$(basename "$fq").tsv"
+}
+
+export -f polyG_check
+export CAT N MIN_TAIL
+
+# run on all fastqs
+for f in *_R1_cut.fastq.gz *_R2_cut.fastq.gz; do
+  polyG_check "$f" &
+done
+wait
+
+# peek
+head -n 2 polyG_checks/*.tsv
+```
+
+# In R - check primers
+
+2.1. Remove primers
+Primer sequence set up  
+```{r}
+FWD <- "GTGYCAGCMGCCGCGGTAA"  ## this is 515f #length 19
+REV <- "GGACTACNVGGGTWTCTAAT"  ## this is 806Br #length 20
+
+#Check the primers
+allOrients <- function(primer) {
+    # Create all orientations of the input sequence
+    require(Biostrings)
+    dna <- DNAString(primer)  # The Biostrings works w/ DNAString objects rather than character vectors
+    orients <- c(Forward = dna, Complement = Biostrings::complement(dna), Reverse = Biostrings::reverse(dna),
+        RevComp = Biostrings::reverseComplement(dna))
+    return(sapply(orients, toString))  # Convert back to character vector
+}
+
+FWD.orients <- allOrients(FWD)
+REV.orients <- allOrients(REV)
+FWD.orients
+```
+
+
+Step 5: Remove primers:
+```{r}
+FWD <- "GTGYCAGCMGCCGCGGTAA"  ## this is 515f #length 19
+REV <- "GGACTACNVGGGTWTCTAAT"  ## this is 806Br #length 20
+
+#Check the primers
+allOrients <- function(primer) {
+    # Create all orientations of the input sequence
+    require(Biostrings)
+    dna <- DNAString(primer)  # The Biostrings works w/ DNAString objects rather than character vectors
+    orients <- c(Forward = dna, Complement = Biostrings::complement(dna), Reverse = Biostrings::reverse(dna),
+        RevComp = Biostrings::reverseComplement(dna))
+    return(sapply(orients, toString))  # Convert back to character vector
+}
+
+FWD.orients <- allOrients(FWD)
+REV.orients <- allOrients(REV)
+FWD.orients
+```
+We are now ready to count the number of times the primers appear in the forward and reverse read, while considering all possible primer orientations. Identifying and counting the primers on one set of paired end FASTQ files is sufficient, assuming all the files were created using the same library preparation, so we’ll just process the first sample.
+
+```{r}
+primerHits <- function(primer, fn) {
+    # Counts number of reads in which the primer is found
+    nhits <- vcountPattern(primer, sread(readFastq(fn)), fixed = FALSE)
+    return(sum(nhits > 0))
+}
+
+rbind(FWD.ForwardReads = sapply(FWD.orients, primerHits, fn = fnFs.g[[2]]), FWD.ReverseReads = sapply(FWD.orients,
+    primerHits, fn = fnRs.g[[2]]), REV.ForwardReads = sapply(REV.orients, primerHits,
+    fn = fnFs.g[[2]]), REV.ReverseReads = sapply(REV.orients, primerHits, fn = fnRs.g[[2]]))
+```
+# On terminal - Remove primers
+
+```{r}
+# cd to your FASTQ directory
+cd ~/Desktop/FDA_Lab/Experiment1/sequencing/raw_reads/
+
+mkdir -p cutadapt_primers
+
+FWD="GTGYCAGCMGCCGCGGTAA"      # 515F
+REV="GGACTACNVGGGTWTCTAAT"     # 806R
+FWD_RC="TTACCGCGGCKGCTGRCAC"   # RC(515F)
+REV_RC="ATTAGAWACCCBNGTAGTCC"  # RC(806R)
+
+for r1 in cutadapt/*_R1_cut.fastq; do
+  s=$(basename "$r1" | sed 's/_R1_cut\.fastq\$//')
+  r2="cutadapt/${s}_R2_cut.fastq"
+
+  out1="cutadapt_primers/${s}_R1_cut2.fastq"
+  out2="cutadapt_primers/${s}_R2_cut2.fastq"
+  logf="cutadapt_primers/${s}_primer.log"
+
+  cutadapt \
+    -g "${FWD}"  -a "${REV_RC}" \
+    -G "${REV}"  -A "${FWD_RC}" \
+    -n 2 \
+    --overlap 17 \
+    --pair-filter=both \
+    --minimum-length 100 \
+    -o "$out1" -p "$out2" \
+    "$r1" "$r2" > "$logf" 2>&1
+
+  echo "Primer-trimmed: $s"
+done
+
+```
+
+
+
+Step 6:  in R: Check that primers were removed: 
+```{r}
+path_g.p <- file.path(path, "cutadapt_primers")   # <- where the *_cut.fastq live
+list.files(path_g.p)
+
+fnFs.g.p <- sort(list.files(path_g.p, pattern = "_R1_cut2\\.fastq$", full.names = TRUE))
+fnRs.g.p <- sort(list.files(path_g.p, pattern = "_R2_cut2\\.fastq$", full.names = TRUE))
+
+# Inspect read quality profiles - to see if they are corrupted
+#The sequencing is 2x300 bp
+plotQualityProfile(fnFs.g.p[1:2]) # not corrupted
+plotQualityProfile(fnRs.g.p[1:2]) # not corrupted
+
+rbind(FWD.ForwardReads = sapply(FWD.orients, primerHits, fn = fnFs.g.p[[1]]), FWD.ReverseReads = sapply(FWD.orients,
+    primerHits, fn = fnRs.g.p[[1]]), REV.ForwardReads = sapply(REV.orients, primerHits,
+    fn = fnFs.g.p[[1]]), REV.ReverseReads = sapply(REV.orients, primerHits, fn = fnRs.g.p[[1]]))
+```
+Note that the first time I checked the presence of primers, I indicated the second file in my fnFs.g and fnRs.g list; but I'm comparing it to the first file in the fnFs.g.p/fnRs.g.p lists. That's because my first file in the .g list is the one that isn't associated with a sample, but it gets removed before the comparison. So I'm really comparing sample ID 1 in both steps. 
+it worked! yippee. But did not remove the RevComp FWD rev or RevComp REV reads... 
+
+
+
+
+

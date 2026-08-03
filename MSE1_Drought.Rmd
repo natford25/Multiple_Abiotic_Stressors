@@ -1,0 +1,156 @@
+---
+title: "MSE1_Drought"
+output: html_document
+date: "2026-05-26"
+---
+Drought treatment in MSE1 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# load packages 
+library(ggplot2)
+library(readxl)
+library(dplyr)
+library(nlme)
+library(lme4)
+library(lmerTest)
+
+# set theme 
+set_theme(theme_bw())
+```
+
+```{r}
+# load data 
+x <- read_xlsx("~/Desktop/FDA_Lab/Experiment1/manuscript/data/SoilProbe.xlsx")
+
+x$Stress_ID <- as.factor(x$Stress_ID)
+x$Drought <- as.factor(x$Drought)
+```
+In the experiment, we only included soil probes in one pot per block (and note that these are not true "blocks". This was a completely random design and I call the racks that the pots were stacked in "blocks"). Probes were also placed so that each unique treatment had one probe measuring soil moisture. I collected soil moisture measurements every two days immediately post-watering. For treatments that were droughted, I collected soil probe readings after watering the appropriate treatments. 
+
+```{r}
+# plot soil moisture across all probes and the full experiment 
+soilmoisture <- ggplot(x, aes(x = Time, y = Probe_Reading, color = Drought, group = ID)) + 
+  geom_line() + 
+  labs(x = "Time", 
+       y = "Soil Moisture", 
+       color = "Drought Treatment") + 
+  geom_vline(xintercept = 16, 
+             linetype = "dashed") + 
+    scale_color_manual(values = c("Presence" = "#e6194B", 
+                                "Absence" = "#4363d8"))
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/soilmoisturefull.pdf")
+```
+Why is there a huge drop off between time point 20 and 21 regardless of drought treatment? Timepoint 21 was between waterings, whereas all other measurements were immediately post-watering 
+
+```{r}
+# soil probe reading at only the last time point (T = 21)
+lasttime <- x[x$Time == 21, ]
+
+lasttime$Stress_ID <- factor(lasttime$Stress_ID, 
+                            levels = c("Control", "MP", "Herbicide", "Antibiotic",
+                                       "Herbicide_MP", "Antibiotic_MP", "Antibiotic_Herbicide", 
+                                       "Antibiotic_Herbicide_MP", 
+                                       "Drought", "Drought_MP", "Drought_Herbicide", 
+                                       "Antibiotic_Drought", "Drought_Herbicide_MP", 
+                                       "Antibiotic_Drought_MP", "Antibiotic_Drought_Herbicide", 
+                                       "Antibiotic_Drought_Herbicide_MP"))
+
+soilprobelasttime <- ggplot(lasttime, aes(x = Stress_ID, y = Probe_Reading, color = Drought)) + 
+  geom_point(size = 3) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  scale_color_manual(values = c("Presence" = "#e6194B", 
+                                "Absence" = "#4363d8")) + 
+  labs(x = "Treatment", 
+       y = "Probe Reading")
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/soilprobelasttime.pdf", soilprobelasttime)
+
+# try boxplot 
+soilprobelasttimeboxplot <- ggplot(lasttime, aes(x = Drought, y = Probe_Reading, color = Drought)) + 
+  geom_boxplot() + 
+  geom_point(alpha = 0.5, size = 2) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  scale_color_manual(values = c("Presence" = "#e6194B", 
+                                "Absence" = "#4363d8")) + 
+  labs(x = "Treatment", 
+       y = "Probe Reading")
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/soilprobelasttimeboxplot.pdf", soilprobelasttimeboxplot)
+
+
+# soil probe reading at the penultimate time point (T = 20)
+penultimate <- x[x$Time == 20, ]
+
+penultimate$Stress_ID <- factor(penultimate$Stress_ID, 
+                                levels = c("Control", "MP", "Herbicide", "Antibiotic",
+                                       "Herbicide_MP", "Antibiotic_MP", "Antibiotic_Herbicide", 
+                                       "Antibiotic_Herbicide_MP", 
+                                       "Drought", "Drought_MP", "Drought_Herbicide", 
+                                       "Antibiotic_Drought", "Drought_Herbicide_MP", 
+                                       "Antibiotic_Drought_MP", "Antibiotic_Drought_Herbicide", 
+                                       "Antibiotic_Drought_Herbicide_MP"))
+
+soilprobepenultimate <- ggplot(penultimate, aes(x = Stress_ID, y = Probe_Reading, color = Drought)) + 
+  geom_point(size = 3) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  scale_color_manual(values = c("Presence" = "#e6194B", 
+                                "Absence" = "#4363d8")) + 
+  labs(x = "Treatment", 
+       y = "Probe Reading")
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/soilprobepenultimate.pdf", soilprobepenultimate)
+
+# boxplot 
+soilprobepenultimateboxplot <- ggplot(penultimate, aes(x = Drought, y = Probe_Reading, color = Drought)) + 
+  geom_boxplot() + 
+  geom_point(alpha = 0.5, size = 2) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  scale_color_manual(values = c("Presence" = "#e6194B", 
+                                "Absence" = "#4363d8")) + 
+  labs(x = "Treatment", 
+       y = "Probe Reading")
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/soilprobepenultimateboxplot.pdf", soilprobepenultimateboxplot)
+
+# comparing drought vs control for the whole experiment
+ggplot(x, aes(x = Drought, y = Probe_Reading, color = Drought)) + 
+  geom_boxplot() + 
+  geom_point(alpha = 0.5, size = 2) + 
+  scale_color_manual(values = c("Presence" = "#e6194B", 
+                                "Absence" = "#4363d8")) + 
+  labs(x = "Treatment", 
+       y = "Probe Reading")
+
+# comparing drought vs control for just the drought portion of the experiment
+soil_drought <- x %>%
+  filter(Time %in% 16:21)
+
+droughtvscontrol <- ggplot(soil_drought, aes(x = Drought, y = Probe_Reading, color = Drought)) + 
+  geom_boxplot() + 
+  geom_point(alpha = 0.5, size = 2) + 
+  scale_color_manual(values = c("Presence" = "#e6194B", 
+                                "Absence" = "#4363d8")) + 
+  labs(x = "Treatment", 
+       y = "Probe Reading")
+
+ggsave("~/Desktop/FDA_Lab/Experiment1/manuscript/plots/droughtvscontrol.pdf", droughtvscontrol)
+```
+
+
+```{r}
+# to show that the last time point drought pots are drier: 
+lasttime
+t.test(Probe_Reading ~ Drought, data = lasttime) # provides a mean difference and p-value for drought vs no drought at this time point
+
+penultimate
+t.test(Probe_Reading ~ Drought, data = penultimate)
+
+soil_drought
+t.test(Probe_Reading ~ Drought, data = soil_drought)
+##
+```
