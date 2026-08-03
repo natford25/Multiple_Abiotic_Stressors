@@ -24,16 +24,14 @@ library(phyloseq)
 library(ALDEx2)
 library(vegan)
 library(readxl)
-    
-#if (!require("BiocManager", quietly = TRUE))
-#  install.packages("BiocManager")
+
 #BiocManager::install("genefilter")
 library(genefilter)
 ```
 
 Step 2: Define the following path variable so that it points to the extracted directory on your local computer
 ```{r}
-path <- "~/Desktop/FDA_Lab/Experiment1/sequencing/raw_reads/"
+path <- "~/raw_reads/"
 #Check path
 list.files(path)
 path
@@ -47,7 +45,7 @@ fnRs <- sort(list.files(path, pattern="_R2_001.fastq", full.names = TRUE))
 # Extract sample names, assuming filenames have format: PROJECT_RH_SAMPLEID_XXX.fastq
 sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 3)
 
-# Inspect read quality profiles - to see if they are corrupted
+# Inspect read quality profiles 
 #The sequencing is 2x300 bp
 plotQualityProfile(fnFs[1:2]) # not corrupted
 plotQualityProfile(fnRs[1:2]) # not corrupted
@@ -86,7 +84,7 @@ out <- filterAndTrim(fnFs.g.p, filtFs, fnRs.g.p, filtRs, #use the primers remove
 #obs: We’ll use standard filtering parameters: maxN=0 (DADA2 requires no Ns), truncQ=2, rm.phix=TRUE and maxEE=2. The maxEE parameter sets the maximum number of “expected errors” allowed in a read, which is a better filter than simply averaging quality scores
 
 head(out)
-save.image("~/Desktop/FDA_Lab/Experiment1/data/dada2_env_out.RData")
+save.image("~/dada2_env_out.RData")
 
 ```
 
@@ -548,7 +546,7 @@ Step 8: Merge Paired Reads
 mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose=TRUE)
 # Inspect the merger data.frame from the first sample
 head(mergers[[1]])
-save.image("~/Desktop/FDA_Lab/Experiment1/data/dada2_env_mergers.RData")
+save.image("~/dada2_env_mergers.RData")
 ```
 
 Step 9: Construct sequence table
@@ -557,7 +555,7 @@ seqtab <- makeSequenceTable(mergers)
 dim(seqtab)
 # Inspect distribution of sequence lengths
 table(nchar(getSequences(seqtab)))
-save.image("~/Desktop/FDA_Lab/Experiment1/data/dada2_env_seq_table.RData")
+save.image("~/dada2_env_seq_table.RData")
 ```
 
 Step 10: Remove Chimeras 
@@ -566,13 +564,12 @@ seqtab.nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=TRUE
 dim(seqtab.nochim)
 
 sum(seqtab.nochim)/sum(seqtab)
-save.image("~/Desktop/FDA_Lab/Experiment1/data/dada2_env_chimeras.RData")
+save.image("~/dada2_env_chimeras.RData")
 ```
 Step 11: Select specific sequence size 
 https://earthmicrobiome.org/protocols-and-standards/16s/#:~:text=Amplification%20protocol&text=Run%20amplicons%20from%20each%20sample,is%20~300%E2%80%93350%20bp.
 Run amplicons from each sample on an agarose gel. Expected band size for 515F–806R is ~300–350 bp.
 ```{r}
-load("~/Desktop/FDA_Lab/Experiment1/data/dada2_env_chimeras.RData")
 table(nchar(getSequences(seqtab.nochim)))
 #Peak around 255 bp
 plot(table(nchar(getSequences(seqtab.nochim))))
@@ -607,6 +604,6 @@ Step 13: Assign taxonomy
 str(seqtab.nochim)
 taxa <- assignTaxonomy(seqtab.nochim, "~/Desktop/FDA_Lab/Experiment1/sequencing/silva_nr99_v138.2_toGenus_trainset.fa.gz", multithread=TRUE)
 
-save.image("~/Desktop/FDA_Lab/Experiment1/data/dada2_env_taxa_genus.RData")
+save.image("~/dada2_env_taxa_genus.RData")
 ```
 
