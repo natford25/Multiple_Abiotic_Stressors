@@ -15,15 +15,11 @@ knitr::opts_chunk$set(
 ```{r}
 # Load packages & set theme 
 library(dplyr)
-library(effsize)
 library(ggplot2)
 library(readxl)
 library(tidyr)
 library(purrr)
 library(stringr)
-library(emmeans)
-library(multcomp) 
-library(multcompView) 
 library(lme4)
 library(lmerTest)
 library(nlme)
@@ -33,11 +29,40 @@ theme_set(theme_bw())
 
 ```{r}
 # Load and prep data 
-x <- read_xlsx("~/MSE1_metadata.xlsx")
+x <- read_xlsx("./MSE1_metadata.xlsx")
 
 # remove sample IDs 59 and 114 because they did not survive the experiment and there is no data associated with them 
 y <- x %>% filter(ID !=59)
 mse1 <- y %>% filter(ID !=114)
+
+# remove sample IDs 71 & 66 (outliers in root architecture)
+mse1 <- mse1 %>% filter(ID!=71)
+mse1 <- mse1 %>% filter(ID!=66)
+
+# remove sample IDs 47 & 164 (outliers in microbiome data)
+mse1 <- mse1 %>% filter(ID!=47)
+mse1 <- mse1 %>% filter(ID!=164)
+
+# remove samples that have no exudate data 
+mse1 <- mse1 %>% filter(ID!=67)
+mse1 <- mse1 %>% filter(ID!=80)
+mse1 <- mse1 %>% filter(ID!=125)
+mse1 <- mse1 %>% filter(ID!=128)
+
+# remove extraction and pcr controls 
+mse1 <- mse1 %>% filter(ID!=177)
+mse1 <- mse1 %>% filter(ID!=178)
+mse1 <- mse1 %>% filter(ID!=179)
+mse1 <- mse1 %>% filter(ID!=180)
+mse1 <- mse1 %>% filter(ID!=181)
+mse1 <- mse1 %>% filter(ID!=182)
+mse1 <- mse1 %>% filter(ID!=183)
+mse1 <- mse1 %>% filter(ID!=184)
+mse1 <- mse1 %>% filter(ID!=185)
+mse1 <- mse1 %>% filter(ID!=186)
+
+# remove NAs
+mse1 <- mse1 %>% drop_na(Stress_ID)
 
 # make sample ID, number of stressors, and stress ID factors 
 mse1$ID <- as.factor(mse1$ID)
@@ -77,19 +102,37 @@ mse1 <- mse1 %>%
 
 # plot 
 npoc_per_root_all <- ggplot(mse1, aes(x = Stress_ID, y = NPOC_per_mg_root, color = Num_Stress)) + 
-  geom_boxplot() + 
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+  geom_boxplot(outlier.alpha = 0, lwd = 1.5) +
+  geom_point(size = 5, alpha = 0.5) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  scale_color_manual(values = c("0" = "#e6194B", 
+                                  "1" = "#ffe119", 
+                                "2" = "#3cb44b", 
+                                "3" = "#4363d8", 
+                                "4" = "#f032e6"))
 
-ggsave("~/npoc_per_root_all.svg", npoc_per_root_all)
+
+# remove the one outlier in Herbicide treatment from the plot
+npoc_per_root_no_outliers <- ggplot(mse1, aes(x = Stress_ID, y = NPOC_per_mg_root, color = Num_Stress)) + 
+  geom_boxplot(outlier.alpha = 0, lwd = 1.5) + 
+  geom_point(size = 5, alpha = 0.5) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  ylim(-0.00001, 0.031) + 
+  scale_color_manual(values = c("0" = "#e6194B", 
+                                  "1" = "#ffe119", 
+                                "2" = "#3cb44b", 
+                                "3" = "#4363d8", 
+                                "4" = "#f032e6"))
+
+
+ggsave("./npoc_per_root_no_outliers.pdf", npoc_per_root_no_outliers, width = 16, height = 14)
 ```
 
 ```{r}
-# stats
+# ANOVA / stats 
 toc_model1 <- lm(NPOC_per_mg_root ~ Stress_ID, data = mse1)
 summary(toc_model1)
 
 anova(toc_model1)
-# treatment not significant
-
-cld(toc_model1,  adjust = "sidak", Letters = letters) 
+# treatment not significant 
 ```
