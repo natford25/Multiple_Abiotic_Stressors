@@ -125,7 +125,7 @@ npoc_per_root_no_outliers <- ggplot(mse1, aes(x = Stress_ID, y = NPOC_per_mg_roo
                                 "4" = "#f032e6"))
 
 
-ggsave("./npoc_per_root_no_outliers.pdf", npoc_per_root_no_outliers, width = 16, height = 14)
+ggsave("./npoc_per_root.pdf", npoc_per_root_no_outliers, width = 16, height = 14)
 ```
 
 ```{r}
