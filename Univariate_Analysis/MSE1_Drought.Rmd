@@ -24,7 +24,7 @@ set_theme(theme_bw())
 
 ```{r}
 # load data 
-x <- read_xlsx("~/SoilProbe.xlsx")
+x <- read_xlsx("./SoilProbe.xlsx")
 
 x$Stress_ID <- as.factor(x$Stress_ID)
 x$Drought <- as.factor(x$Drought)
@@ -35,15 +35,15 @@ In the experiment, we only included soil moisture probes in one pot per block (a
 # plot soil moisture across all probes and the full experiment 
 soilmoisture <- ggplot(x, aes(x = Time, y = Probe_Reading, color = Drought, group = ID)) + 
   geom_line() + 
-  labs(x = "Time", 
-       y = "Soil Moisture", 
+  labs(x = "Days Since Planting", 
+       y = "Soil Volumetric Water Content (%)", 
        color = "Drought Treatment") + 
   geom_vline(xintercept = 16, 
              linetype = "dashed") + 
     scale_color_manual(values = c("Presence" = "#e6194B", 
                                 "Absence" = "#4363d8"))
 
-ggsave("~/soilmoisture.pdf", soilmoisture)
+ggsave("./soilmoisture.pdf", soilmoisture)
 ```
 Note Timepoint 21 was between waterings, whereas all other measurements were immediately post-watering 
 
@@ -58,9 +58,9 @@ droughtvscontrol <- ggplot(soil_drought, aes(x = Drought, y = Probe_Reading, col
   scale_color_manual(values = c("Presence" = "#e6194B", 
                                 "Absence" = "#4363d8")) + 
   labs(x = "Treatment", 
-       y = "Probe Reading")
+       y = "Soil Volumetric Water Content (%)")
 
-ggsave("~/droughtvscontrol.pdf", droughtvscontrol)
+ggsave("./droughtvscontrol.pdf", droughtvscontrol)
 ```
 
 ```{r}
