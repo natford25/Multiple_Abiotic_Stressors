@@ -36,7 +36,7 @@ theme_set(theme_bw())
 
 ```{r}
 # Load and prep data 
-x <- read_xlsx("~/MSE1_metadata.xlsx")
+x <- read_xlsx("./MSE1_metadata.xlsx")
 
 # remove sample IDs 59 and 114 because they did not survive the experiment and there is no data associated with them 
 y <- x %>% filter(ID !=59)
@@ -221,10 +221,10 @@ shoot_biomass_boxplot <- ggplot(mse1_clean, aes(x = Stress_ID, y = Shoot_Biomass
         "Drought_Herbicide_MP" = "#a9a9a9", 
         "Antibiotic_Drought_Herbicide_MP" = "#000000"
     )) + 
-  labs(y = "Shoot Biomass", x = "Treatment") + 
+  labs(y = "Shoot Biomass (mg)", x = "Treatment") + 
   theme(legend.position = "none")
 
-ggsave("~/shoot_biomass_boxplot.pdf", shoot_biomass_boxplot)
+ggsave("./shoot_biomass_boxplot.pdf", shoot_biomass_boxplot)
 ```
 ## Root Biomass ##
 #### Calculating the multiplicative null model estimates and effect sizes
@@ -372,10 +372,10 @@ root_biomass_boxplot <- ggplot(mse1_clean, aes(x = Stress_ID, y = Root_Biomass, 
         "Drought_Herbicide_MP" = "#a9a9a9", 
         "Antibiotic_Drought_Herbicide_MP" = "#000000"
     )) + 
-  labs(y = "Root Biomass", x = "Treatment") + 
+  labs(y = "Root Biomass (mg)", x = "Treatment") + 
   theme(legend.position = "none")
 
-ggsave("~/root_biomass_boxplot.pdf", root_biomass_boxplot)
+ggsave("./root_biomass_boxplot.pdf", root_biomass_boxplot)
 ```
 
 
@@ -435,8 +435,8 @@ biomass_eff_size_fig <- ggarrange(shoot_bio_multi_effects, root_bio_multiplicati
                                   ncol = 1, nrow = 2, 
                                   common.legend = TRUE, legend = "right", 
                                   align = "hv")
-)
-ggsave("~/biomass_multi_eff_size_fig.pdf", biomass_eff_size_fig, width = 10, height = 14)
+
+ggsave("./biomass_multi_eff_size_fig.pdf", biomass_eff_size_fig, width = 10, height = 14)
 ```
 
 # Root Architecture #
@@ -487,7 +487,7 @@ root_arch_corr <- ggplot(r2_long, aes(x = var2, y = var1, fill = r2)) +
     axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)
   )
 
-ggsave("~/root_arch_coor.pdf", root_arch_corr, width = 14, height = 14)
+ggsave("./root_arch_coor.pdf", root_arch_corr, width = 14, height = 14)
 ```
 
 ## Multivariate summary of root traits across stress treatments ## 
@@ -538,7 +538,7 @@ root_arch_pca <- ggplot(scores, aes(PC1, PC2, color = stress_id)) +
         "Antibiotic_Drought_Herbicide_MP" = "#000000"
     ))
 
-ggsave("~/root_arch_pca.pdf", root_arch_pca, width = 11, height = 10)
+ggsave("./root_arch_pca.pdf", root_arch_pca, width = 11, height = 10)
 ```
 
 ## Root Depth ##
@@ -2162,9 +2162,10 @@ p_biomass <- ggplot(biomass_df, aes(x = Response, fill = classification)) +
                               "Synergistic" = "#e6194B", 
                               "Null" = "gray50")) + 
   scale_x_discrete(labels = c("Root Biomass", "Shoot Biomass")) + 
-  theme(axis.text.x = element_text(angle =45, hjust =1))
+  theme(axis.text.x = element_text(angle =45, hjust =1)) + 
+  coord_flip()
 
-ggsave("~/prop_biomass_classification.pdf", p_biomass, height = 4, width = 3)
+ggsave("./prop_biomass_classification.pdf", p_biomass, height = 4, width = 3)
 
 p_arch <- ggplot(architecture_df, aes(x = Response, fill = classification)) + 
   geom_bar(position = "fill") + 
@@ -2179,7 +2180,7 @@ p_arch <- ggplot(architecture_df, aes(x = Response, fill = classification)) +
                               "Volume", "Max. Width", "Width:Depth", "Total Root Length"
   ))
 
-ggsave("~/prop_architecture_classifications.pdf", p_arch, width = 6, height =4)
+ggsave("./prop_architecture_classifications.pdf", p_arch, width = 6, height =4)
 
 # plot stress ID by biomass and arch 
 p_biomass_stress <- ggplot(biomass_df, aes(x = combination, fill = classification)) + 
@@ -2195,7 +2196,7 @@ p_biomass_stress <- ggplot(biomass_df, aes(x = combination, fill = classificatio
                               "Antibiotic + Herbicide + MP", "Antibiotic + Drought + Herbicide", 
                               "Antibiotic + Drought + Herbicide + MP"))
 
-ggsave("~/prop_biomass_by_stress.pdf", p_biomass_stress, width = 5, height = 4)
+ggsave("./prop_biomass_by_stress.pdf", p_biomass_stress, width = 5, height = 4)
 
 p_arch_stress <- ggplot(architecture_df, aes(x = combination, fill = classification)) + 
   geom_bar(position = "fill") + 
@@ -2210,7 +2211,7 @@ p_arch_stress <- ggplot(architecture_df, aes(x = combination, fill = classificat
                               "Antibiotic + Herbicide + MP", "Antibiotic + Drought + Herbicide", 
                               "Antibiotic + Drought + Herbicide + MP"))
 
-ggsave("~/prop_arch_by_stress.pdf", p_arch_stress, width = 5, height = 4)
+ggsave("./prop_arch_by_stress.pdf", p_arch_stress, width = 5, height = 4)
 ```
 
 
@@ -2227,5 +2228,5 @@ arch_eff_size_fig <- ggarrange(root_tips_multi_effects, root_depth_multiplicativ
                               common.legend = TRUE, 
                               align = "hv")
 
-ggsave("~/arch_eff_size_full_fig.pdf", arch_eff_size_fig, width = 18, height = 14)
+ggsave("./arch_eff_size_full_fig.pdf", arch_eff_size_fig, width = 18, height = 14)
 ```
