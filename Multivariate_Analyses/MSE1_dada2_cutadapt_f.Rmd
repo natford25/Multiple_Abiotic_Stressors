@@ -54,7 +54,7 @@ $ conda install -c bioconda dada2
 
 --- check G-tails
 conda activate dada2
-cd Desktop/GitProjects/raw_reads/
+cd Desktop/GitProjects/syncoms_experiment/data/Nextseq2000/fastq
 $ run the following on bash
 ```{r}
 # config
@@ -101,9 +101,9 @@ wait
 # peek
 head -n 2 polyG_checks/*.tsv
 ```
---- remove Poly G (on terminal)
+--- remove Poly G
 ```{r}
-CUTADAPT="<PATH_TO_CUTADAPT>"
+CUTADAPT="/Users/nef5181/miniconda3/envs/dada2/bin/cutadapt"
 mkdir -p cutadapt
 
 for r1 in *_R1_001.fastq.gz; do
@@ -119,13 +119,12 @@ for r1 in *_R1_001.fastq.gz; do
 
   echo "Done: $sample"
 done
-
 ```
 
 
 Step 4: in R: Check that poly-G tails were removed by cutadapt (in R)
 ```{r}
-path_g <- file.path(path, "cutadapt")   # where the *_cut.fastq live
+path_g <- file.path(path, "cutadapt")   #  where the *_cut.fastq live
 
 fnFs.g <- sort(list.files(path_g, pattern = "_R1_cut\\.fastq$", full.names = TRUE))
 fnRs.g <- sort(list.files(path_g, pattern = "_R2_cut\\.fastq$", full.names = TRUE))
@@ -184,12 +183,10 @@ done
 wait
 
 # peek
-head -n 2 polyG_checks/*.tsv
+head -n 2 polyG_checks/*.tsv # should all be 0
 ```
 
 # In R - check primers
-
-2.1. Remove primers
 Primer sequence set up  
 ```{r}
 FWD <- "GTGYCAGCMGCCGCGGTAA"  ## this is 515f #length 19
@@ -244,10 +241,9 @@ rbind(FWD.ForwardReads = sapply(FWD.orients, primerHits, fn = fnFs.g[[2]]), FWD.
     fn = fnFs.g[[2]]), REV.ReverseReads = sapply(REV.orients, primerHits, fn = fnRs.g[[2]]))
 ```
 # On terminal - Remove primers
-
 ```{r}
 # cd to your FASTQ directory
-cd ~/raw_reads/
+cd ./raw_reads/
 
 mkdir -p cutadapt_primers
 
@@ -257,9 +253,9 @@ FWD_RC="TTACCGCGGCKGCTGRCAC"   # RC(515F)
 REV_RC="ATTAGAWACCCBNGTAGTCC"  # RC(806R)
 
 for r1 in cutadapt/*_R1_cut.fastq; do
-  s=$(basename "$r1" | sed 's/_R1_cut\.fastq\$//')
+base=$(basename "$r1")  
+s=${base%_R1_cut.fastq}
   r2="cutadapt/${s}_R2_cut.fastq"
-
   out1="cutadapt_primers/${s}_R1_cut2.fastq"
   out2="cutadapt_primers/${s}_R2_cut2.fastq"
   logf="cutadapt_primers/${s}_primer.log"
@@ -276,7 +272,6 @@ for r1 in cutadapt/*_R1_cut.fastq; do
 
   echo "Primer-trimmed: $s"
 done
-
 ```
 
 Step 6:  in R: Check that primers were removed: 
