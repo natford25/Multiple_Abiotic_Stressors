@@ -97,7 +97,7 @@ plotErrors(errF, nominalQ=TRUE)
 #plotErrors(errR, nominalQ=TRUE)
 ```
 
-The error rates don't look so good (want it to be close the red line, and we want to get rid of the dip in error frequency around 30/35 score). To deal with this, I am trying 4 options from the above github page and will choose the option that optimizes the error rates. 
+The error rates don't look good; to deal with this, I am trying 4 options from the linked github pages and will choose the option that optimizes the error rates. 
 
 Option 1 from JacobRPrice alter loess arguments (weights and span and enforce monotonicity)
 benjjneb/dada2#1307
