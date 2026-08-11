@@ -8,7 +8,7 @@ date: "2025-12-17"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Initial Library
+1: Initial Library
 ```{r, include=FALSE}
 library(rlang)
 #if (!require("BiocManager", quietly = TRUE))
@@ -31,7 +31,7 @@ library(genefilter)
 
 Step 2: Define the following path variable so that it points to the extracted directory on your local computer
 ```{r}
-path <- "~/raw_reads/"
+path <- "./raw_reads/"
 #Check path
 list.files(path)
 path
@@ -56,7 +56,6 @@ path_g.p <- file.path(path, "cutadapt_primers")   # <- where the *_cut.fastq liv
 
 fnFs.g.p <- sort(list.files(path_g.p, pattern = "_R1_cut2\\.fastq$", full.names = TRUE))
 fnRs.g.p <- sort(list.files(path_g.p, pattern = "_R2_cut2\\.fastq$", full.names = TRUE))
-
 ```
 
 Step 4: Inspect read quality profiles
@@ -79,13 +78,12 @@ out <- filterAndTrim(fnFs.g.p, filtFs, fnRs.g.p, filtRs, #use the primers remove
                      trimLeft = c(0, 0), #primers removed cutadapt
                      truncLen=c(250, 240),
               maxN=0, maxEE=c(2,2), truncQ=2, rm.phix=TRUE,
-              compress=TRUE, multithread=TRUE) # On Windows set multithread=FALSE
+              compress=TRUE, multithread=TRUE)
 
 #obs: We’ll use standard filtering parameters: maxN=0 (DADA2 requires no Ns), truncQ=2, rm.phix=TRUE and maxEE=2. The maxEE parameter sets the maximum number of “expected errors” allowed in a read, which is a better filter than simply averaging quality scores
 
 head(out)
-save.image("~/dada2_env_out.RData")
-
+save.image("./dada2_env_out.RData")
 ```
 
 Step 6: Learn error rates 
