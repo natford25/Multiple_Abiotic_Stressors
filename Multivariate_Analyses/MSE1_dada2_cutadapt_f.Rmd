@@ -54,7 +54,7 @@ $ conda install -c bioconda dada2
 
 --- check G-tails
 conda activate dada2
-cd Desktop/GitProjects/syncoms_experiment/data/Nextseq2000/fastq
+cd ./raw_reads
 $ run the following on bash
 ```{r}
 # config
@@ -103,7 +103,7 @@ head -n 2 polyG_checks/*.tsv
 ```
 --- remove Poly G
 ```{r}
-CUTADAPT="/Users/nef5181/miniconda3/envs/dada2/bin/cutadapt"
+CUTADAPT="~/miniconda3/envs/dada2/bin/cutadapt"
 mkdir -p cutadapt
 
 for r1 in *_R1_001.fastq.gz; do
