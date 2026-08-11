@@ -170,16 +170,7 @@ errF_1 <- learnErrors(
   errorEstimationFunction = loessErrfun_mod1,
   verbose = TRUE
 )
-## 108604125 total bases in 482685 reads from 1 samples will be used for learning the error rates.
-## Initializing error rates to maximum possible estimate.
-## selfConsist step 1 .
-##    selfConsist step 2
-##    selfConsist step 3
-##    selfConsist step 4
-##    selfConsist step 5
-##    selfConsist step 6
-##    selfConsist step 7
-## Convergence after  7  rounds.
+
 errR_1 <- learnErrors(
   filtRs,
   multithread = TRUE,
@@ -187,18 +178,6 @@ errR_1 <- learnErrors(
   errorEstimationFunction = loessErrfun_mod1,
   verbose = TRUE
 )
-## 106190700 total bases in 482685 reads from 1 samples will be used for learning the error rates.
-## Initializing error rates to maximum possible estimate.
-## selfConsist step 1 .
-##    selfConsist step 2
-##    selfConsist step 3
-##    selfConsist step 4
-##    selfConsist step 5
-##    selfConsist step 6
-##    selfConsist step 7
-##    selfConsist step 8
-##    selfConsist step 9
-##    selfConsist step 10
 ```
 
 Option 2 enforce monotonicity only.
@@ -271,16 +250,6 @@ errF_2 <- learnErrors(
   errorEstimationFunction = loessErrfun_mod2,
   verbose = TRUE
 )
-## 108604125 total bases in 482685 reads from 1 samples will be used for learning the error rates.
-## Initializing error rates to maximum possible estimate.
-## selfConsist step 1 .
-##    selfConsist step 2
-##    selfConsist step 3
-##    selfConsist step 4
-##    selfConsist step 5
-##    selfConsist step 6
-##    selfConsist step 7
-## Convergence after  7  rounds.
 
 errR_2 <- learnErrors(
   filtRs,
@@ -289,15 +258,6 @@ errR_2 <- learnErrors(
   errorEstimationFunction = loessErrfun_mod2,
   verbose = TRUE
 )
-## 106190700 total bases in 482685 reads from 1 samples will be used for learning the error rates.
-## Initializing error rates to maximum possible estimate.
-## selfConsist step 1 .
-##    selfConsist step 2
-##    selfConsist step 3
-##    selfConsist step 4
-##    selfConsist step 5
-##    selfConsist step 6
-## Convergence after  6  rounds.
 ```
 Option 3 alter loess function (weights only) and enforce monotonicity
 From JacobRPrice benjjneb/dada2#1307
@@ -371,19 +331,6 @@ errF_3 <- learnErrors(
   errorEstimationFunction = loessErrfun_mod3,
   verbose = TRUE
 )
-## 108604125 total bases in 482685 reads from 1 samples will be used for learning the error rates.
-## Initializing error rates to maximum possible estimate.
-## selfConsist step 1 .
-##    selfConsist step 2
-##    selfConsist step 3
-##    selfConsist step 4
-##    selfConsist step 5
-##    selfConsist step 6
-##    selfConsist step 7
-##    selfConsist step 8
-##    selfConsist step 9
-##    selfConsist step 10
-
 
 # check what this looks like
 errR_3 <- learnErrors(
@@ -393,16 +340,6 @@ errR_3 <- learnErrors(
   errorEstimationFunction = loessErrfun_mod3,
   verbose = TRUE
 )
-## 106190700 total bases in 482685 reads from 1 samples will be used for learning the error rates.
-## Initializing error rates to maximum possible estimate.
-## selfConsist step 1 .
-##    selfConsist step 2
-##    selfConsist step 3
-##    selfConsist step 4
-##    selfConsist step 5
-##    selfConsist step 6
-##    selfConsist step 7
-## Convergence after  7  rounds.
 ```
 
 Option 4 Alter loess function arguments (weights and span and degree, also enforce monotonicity)
@@ -476,40 +413,18 @@ errF_4 <- learnErrors(
   errorEstimationFunction = loessErrfun_mod4,
   verbose = TRUE
 )
-## 287310600 total bases in 1276936 reads from 7 samples will be used for learning the error rates.
-## Initializing error rates to maximum possible estimate.
-## selfConsist step 1 .......
-##    selfConsist step 2
-##    selfConsist step 3
-##    selfConsist step 4
-##    selfConsist step 5
-##    selfConsist step 6
-##    selfConsist step 7
-##    selfConsist step 8
-##    selfConsist step 9
-##    selfConsist step 10
+
 errR_4 <- learnErrors(
   filtRs,
   multithread = TRUE,
   errorEstimationFunction = loessErrfun_mod4,
   verbose = TRUE
 )
-## 280925920 total bases in 1276936 reads from 7 samples will be used for learning the error rates.
-## Initializing error rates to maximum possible estimate.
-## selfConsist step 1 .......
-##    selfConsist step 2
-##    selfConsist step 3
-##    selfConsist step 4
-##    selfConsist step 5
-##    selfConsist step 6
-##    selfConsist step 7
-##    selfConsist step 8
-## Convergence after  8  rounds.
 ```
 
 Compare error rates 
 ```{r}
-#save.image("~/Desktop/GitProjects/syncoms_experiment/data/dada2/dada2_env_errors.RData")
+#save.image("./dada2_env_errors.RData")
 # Dots in 0 y-axis is an expected behavior, especially with high-quality reads (Q ≥ 30)
 plotErrors(errF, nominalQ = TRUE)
 plotErrors(errF_1, nominalQ=TRUE)
@@ -522,7 +437,6 @@ plotErrors(errR_1, nominalQ=TRUE)
 plotErrors(errR_2, nominalQ=TRUE)
 plotErrors(errR_3, nominalQ=TRUE)
 plotErrors(errR_4, nominalQ=TRUE)
-
 ```
 
 Option 4 is the best, get rid of the other error rates
@@ -544,7 +458,7 @@ Step 8: Merge Paired Reads
 mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose=TRUE)
 # Inspect the merger data.frame from the first sample
 head(mergers[[1]])
-save.image("~/dada2_env_mergers.RData")
+save.image("./dada2_env_mergers.RData")
 ```
 
 Step 9: Construct sequence table
@@ -553,7 +467,7 @@ seqtab <- makeSequenceTable(mergers)
 dim(seqtab)
 # Inspect distribution of sequence lengths
 table(nchar(getSequences(seqtab)))
-save.image("~/dada2_env_seq_table.RData")
+save.image("./dada2_env_seq_table.RData")
 ```
 
 Step 10: Remove Chimeras 
@@ -562,7 +476,7 @@ seqtab.nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=TRUE
 dim(seqtab.nochim)
 
 sum(seqtab.nochim)/sum(seqtab)
-save.image("~/dada2_env_chimeras.RData")
+save.image("./dada2_env_chimeras.RData")
 ```
 Step 11: Select specific sequence size 
 https://earthmicrobiome.org/protocols-and-standards/16s/#:~:text=Amplification%20protocol&text=Run%20amplicons%20from%20each%20sample,is%20~300%E2%80%93350%20bp.
@@ -600,8 +514,8 @@ sum(track[, "nonchim"]) # 23,229,069
 Step 13: Assign taxonomy
 ```{r}
 str(seqtab.nochim)
-taxa <- assignTaxonomy(seqtab.nochim, "~/Desktop/FDA_Lab/Experiment1/sequencing/silva_nr99_v138.2_toGenus_trainset.fa.gz", multithread=TRUE)
+taxa <- assignTaxonomy(seqtab.nochim, "./silva_nr99_v138.2_toGenus_trainset.fa.gz", multithread=TRUE)
 
-save.image("~/dada2_env_taxa_genus.RData")
+save.image("./dada2_env_taxa_genus.RData")
 ```
 
