@@ -94,7 +94,7 @@ Traditional: Option 0
 errF <- learnErrors(filtFs, multithread=TRUE)
 errR <- learnErrors(filtRs, multithread=TRUE)
 plotErrors(errF, nominalQ=TRUE)
-#plotErrors(errR, nominalQ=TRUE)
+plotErrors(errR, nominalQ=TRUE)
 ```
 
 The error rates don't look good; to deal with this, I am trying 4 options from the linked github pages and will choose the option that optimizes the error rates. 
