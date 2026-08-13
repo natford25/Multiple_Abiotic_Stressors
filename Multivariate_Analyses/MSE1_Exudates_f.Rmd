@@ -554,7 +554,7 @@ drought_mp_distances <- data.frame(
                   sd(d_DMP_D,  na.rm = TRUE) / sqrt(length(d_DMP_D)))
 )
 
-drought_mp_metabolomics_d <- drought_mp_distances$data
+drought_mp_metabolomics_d <- drought_mp_distances
 saveRDS(drought_mp_metabolomics_d, "./drought_mp_metabolomics_d.rds")
 
 
@@ -576,7 +576,7 @@ antibiotic_mp_distances <- data.frame(
                   sd(d_ABMP_AB,  na.rm = TRUE) / sqrt(length(d_ABMP_AB)))
 )
 
-antibiotic_mp_metabolomics_d <- antibiotic_mp_distances$data
+antibiotic_mp_metabolomics_d <- antibiotic_mp_distances
 saveRDS(antibiotic_mp_metabolomics_d, "./antibiotic_mp_metabolomics_d.rds")
 
 ## MP + HB ## 
@@ -597,7 +597,7 @@ herbicide_mp_distances <- data.frame(
                   sd(d_HBMP_HB,  na.rm = TRUE) / sqrt(length(d_HBMP_HB)))
 )
 
-herbicide_mp_metabolomics_d <- herbicide_mp_distances$data
+herbicide_mp_metabolomics_d <- herbicide_mp_distances
 saveRDS(herbicide_mp_metabolomics_d, "./herbicide_mp_metabolomics_d.rds")
 
 ## AB + HB ## 
@@ -617,7 +617,7 @@ antibiotic_herbicide_distances <- data.frame(
                   sd(d_ABHB_HB,  na.rm = TRUE) / sqrt(length(d_ABHB_HB)))
 )
 
-antibiotic_herbicide_metabolomics_d <- antibiotic_herbicide_distances$data
+antibiotic_herbicide_metabolomics_d <- antibiotic_herbicide_distances
 saveRDS(antibiotic_herbicide_metabolomics_d, "./antibiotic_herbicide_metabolomics_d.rds")
 
 ## DR + HB ## 
@@ -637,7 +637,7 @@ drought_herbicide_distances <- data.frame(
                   sd(d_DRHB_HB,  na.rm = TRUE) / sqrt(length(d_DRHB_HB)))
 )
 
-drought_herbicide_metabolomics_d <- drought_herbicide_distances$data
+drought_herbicide_metabolomics_d <- drought_herbicide_distances
 saveRDS(drought_herbicide_metabolomics_d, "./drought_herbicide_metabolomics_d.rds")
 
 ## DR + AB ## 
@@ -657,7 +657,7 @@ antibiotic_drought_distances <- data.frame(
                   sd(d_ABDR_DR,  na.rm = TRUE) / sqrt(length(d_ABDR_DR)))
 )
 
-antibiotic_drought_metabolomics_d <- antibiotic_drought_distances$data
+antibiotic_drought_metabolomics_d <- antibiotic_drought_distances
 saveRDS(antibiotic_drought_metabolomics_d, "./antibiotic_drought_metabolomics_d.rds")
 
 ### 3-way stresses ### 
@@ -678,7 +678,7 @@ antibiotic_drought_mp_distances <- data.frame(
                  sd(d_ABDRMP_ABDR, na.rm = TRUE) / sqrt(length(d_ABDRMP_ABDR)))
 )
   
-antibiotic_drought_mp_metabolomics_d <- antibiotic_drought_mp_distances$data
+antibiotic_drought_mp_metabolomics_d <- antibiotic_drought_mp_distances
 saveRDS(antibiotic_drought_mp_metabolomics_d, "./antibiotic_drought_mp_metabolomics_d.rds")
 
 
@@ -699,7 +699,7 @@ drought_herbicide_mp_distances <- data.frame(
                  sd(d_DRHBMP_DRHB, na.rm = TRUE) / sqrt(length(d_DRHBMP_DRHB)))
 )
 
-drought_herbicide_mp_metabolomics_d <- drought_herbicide_mp_distances$data
+drought_herbicide_mp_metabolomics_d <- drought_herbicide_mp_distances
 saveRDS(drought_herbicide_mp_metabolomics_d, "./drought_herbicide_mp_metabolomics_d.rds")
 
 ## AB + HB + MP ## 
@@ -719,7 +719,7 @@ antibiotic_herbicide_mp_distances <- data.frame(
                  sd(d_ABHBMP_ABHB, na.rm = TRUE) / sqrt(length(d_ABHBMP_ABHB)))
 )
 
-antibiotic_herbicide_mp_metabolomics_d <- antibiotic_herbicide_mp_distances$data
+antibiotic_herbicide_mp_metabolomics_d <- antibiotic_herbicide_mp_distances
 saveRDS(antibiotic_herbicide_mp_metabolomics_d, "./antibiotic_herbicide_mp_metabolomics_d.rds")
 
 ## AB + DR + HB ## 
@@ -739,7 +739,7 @@ antibiotic_drought_herbicide_distances <- data.frame(
                  sd(d_ABDRHB_ABDR, na.rm = TRUE) / sqrt(length(d_ABDRHB_ABDR)))
 )
 
-antibiotic_drought_herbicide_metabolomics_d <- antibiotic_drought_herbicide_distances$data
+antibiotic_drought_herbicide_metabolomics_d <- antibiotic_drought_herbicide_distances
 saveRDS(antibiotic_drought_herbicide_metabolomics_d, "./antibiotic_drought_herbicide_metabolomics_d.rds")
 
 #### 4 stress #### 
@@ -762,7 +762,7 @@ antibiotic_drought_herbicide_mp_distances <- data.frame(
                  sd(d_ABDRHBMP_ABDRHB, na.rm = TRUE) / sqrt(length(d_ABDRHBMP_ABDRHB)))
 )
 
-allfour_metabolomics_d <- antibiotic_drought_herbicide_mp_distances$data
+allfour_metabolomics_d <- antibiotic_drought_herbicide_mp_distances
 saveRDS(allfour_metabolomics_d, "./allfour_metabolomics_d.rds")
 ```
 
