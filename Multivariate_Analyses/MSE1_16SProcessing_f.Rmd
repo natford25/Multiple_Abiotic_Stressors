@@ -24,9 +24,9 @@ library(tidyverse)
 ```
 
 
-#1. Taxonomy inspect
+#Taxonomy inspect
 ```{r}
-load("~/dada2_env_taxa_genus.RData")
+load("./dada2_env_taxa_genus.RData")
 taxa.print <- taxa # Removing sequence rownames for display only
 rownames(taxa.print) <- NULL
 head(taxa.print)
@@ -34,9 +34,9 @@ head(taxa.print)
 
 Export
 ```{r}
-write.csv(seqtab.nochim, file = "~/asv_table_16S.csv")
-write.csv(taxa, file = "~/tax_table_16S.csv")
-save.image("~/dada2_env_taxa_genus_complete.RData")
+write.csv(seqtab.nochim, file = "./asv_table_16S.csv")
+write.csv(taxa, file = "./tax_table_16S.csv")
+save.image("./dada2_env_taxa_genus_complete.RData")
 ```
 
 #create phyloseq object
@@ -45,12 +45,6 @@ Library
 library(phyloseq); packageVersion("phyloseq") # v 1.54.2
 library(readr)
 ```
-
-# need to extract the OTU table from the phyloseq object that has been filtered (phyloseq_clean2) so that the number of taxa between the OTU table and taxa table match :) 
-```{r}
-#otu_for_spp <- otu_table(phyloseq_clean2)
-```
-
 
 #1. Input the files and format
 ```{r}
@@ -71,18 +65,17 @@ tax_mat <- as.matrix(tax)
 dim(tax_mat); ncol(tax_mat); nrow(tax_mat) 
 
 # Check if asv and tax_mat have the same number of taxa
-nrow(asv); nrow(tax_mat) # yes! 
+nrow(asv); nrow(tax_mat)  
 ```
 
 #2. Format
-```{r}
-asv <- t(asv) # transpose (rows <-> columns) 
+```{r} 
 samples.out <- rownames(asv)
 subject <- sapply(strsplit(samples.out, "D"), `[`, 1)
 
 ## Create SAMPLE DATAFRAME ##
-#Preparing samdf = sample dataframe with features of samples, i.e. site, season, depth, etc
-max=read.csv("~/MSE1_metadata.csv", header = TRUE )
+#Preparing samdf = sample dataframe with features of samples
+max=read.csv("./MSE1_metadata.csv", header = TRUE )
 
 saveRDS(max, file = "samdf.rds")
 
@@ -109,29 +102,29 @@ physeq <- phyloseq(otu_table(asv, taxa_are_rows = FALSE), # samples are rows
 ```
 
 ```{r}
-save(physeq, file="~/phyloseq_original.Rdata")
-sum(sample_sums(physeq)) #23229069 reads across all samples before filtering
-ntaxa(physeq) #259076 ASVs before filtering
+save(physeq, file="./phyloseq_original.Rdata")
+sum(sample_sums(physeq)) 
+ntaxa(physeq) 
 ```
 
 Remove Chroloplast and or mitochondrial taxa
 ```{r}
 phyloseq_clean <- subset_taxa(physeq, Family!= "Mitochondria" | is.na(Family) & Order!="Chloroplast" | is.na(Order))
-sum(sample_sums(phyloseq_clean)) #23023036 reads across all samples 
-ntaxa(phyloseq_clean) #255370 ASVs
+sum(sample_sums(phyloseq_clean)) 
+ntaxa(phyloseq_clean) 
 ```
 
 #3. Retain just assigned Bacteria Kingdom
 ```{r}
 phyloseq_clean<-subset_taxa(phyloseq_clean, Kingdom == "Bacteria")
-sum(sample_sums(phyloseq_clean)) #21703148 
-ntaxa(phyloseq_clean) #253015 ASVs
+sum(sample_sums(phyloseq_clean)) 
+ntaxa(phyloseq_clean) 
 ```
 
 #4. Remove ASV with 2 or less reads - we consider a missreading.
 ```{r}
 phyloseq_clean2 <- prune_taxa(taxa_sums(phyloseq_clean)>2, phyloseq_clean)
-sum(sample_sums(phyloseq_clean2)) #21528028 reads 
+sum(sample_sums(phyloseq_clean2)) 
 min(sample_sums(phyloseq_clean2)) # sample with the minimum # of reads: 63 reads (this is sample ID 47) 
 ```
 
@@ -143,10 +136,10 @@ margin <- ifelse(taxa_are_rows(ps), 1, 2)               # 1 = taxa rows, 2 = tax
 prev   <- apply(otu_table(ps) > 0, margin, sum)         # number of samples with >0
 phyloseq_clean2 <- prune_taxa(prev > 7, ps)            # drop ASVs seen in less than 7 samples
 
-ntaxa(phyloseq_clean2) #12313 ASVs 
-sum(sample_sums(phyloseq_clean2)) # 20,325,685 reads 
+ntaxa(phyloseq_clean2)  
+sum(sample_sums(phyloseq_clean2)) 
 
-save(phyloseq_clean2, file="~/phyloseq_clean.Rdata")
+save(phyloseq_clean2, file="./phyloseq_clean.Rdata")
 
 #That removes any ASV that appears in less than 7 samples (regardless of its read count).
 ```
@@ -154,13 +147,8 @@ save(phyloseq_clean2, file="~/phyloseq_clean.Rdata")
 #5. Plot rarefaction curve 
 ```{r}
 library(vegan) #v 2.7-3
-#rare <-rarecurve(otu_table(physeq), step=50, cex=0.5)
-
 tab <- otu_table(phyloseq_clean2)
-
 class(tab) <- "matrix"
-
-#tab <- t(tab)
 rare <-rarecurve(tab, step=50, cex=0.5, label = T)
 ```
 
@@ -192,15 +180,13 @@ sort(sample_sums(selected_rare))
 #compare two permuted otu table to ensure it worked.
 View(otu_table(phyloseq_clean2)[1:10, 1:10])
 View(otu_table(selected_rare)[1:10, 1:10])
- 
 ```
-
 
 # Export
 ```{r}
 physeq_rare <- selected_rare
 
-save(physeq_rare, file="~/phyloseq_rarefied.Rdata")
+save(physeq_rare, file="./phyloseq_rarefied.Rdata")
 ```
 
 
