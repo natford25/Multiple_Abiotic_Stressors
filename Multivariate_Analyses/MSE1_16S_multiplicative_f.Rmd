@@ -4,8 +4,6 @@ author: "Natalie Ford"
 date: "`r Sys.Date()`"
 output: html_document
 ---
-Final R markdown file for MSE1 publication 
-16S amplicon sequencing analysis 
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
@@ -40,7 +38,7 @@ theme_set(theme_bw())
 
 ```{r}
 # load data
-load("~/phyloseq_rarefied.Rdata")
+load("./phyloseq_rarefied.Rdata")
 ntaxa(physeq_rare)
 ```
 
@@ -79,7 +77,7 @@ smd <- cbind(sample_data(physeq_mse1.filtered3), alphadiv)
 sample_data(physeq_mse1.filtered3) <- smd  # update in phyloseq object
 
 # save 
-save(physeq_mse1.filtered3, file="~/phyloseq_filtered_alphadiv_updated.Rdata")
+save(physeq_mse1.filtered3, file="./phyloseq_filtered_alphadiv_updated.Rdata")
 ```
 
 ```{r}
@@ -123,7 +121,7 @@ plot.Obs.ASVs <- ggplot(smd, aes(x = Stress_ID, y = Observed, color = Stress_ID)
   )
 
 #save  
-ggsave("~/obs_ASV_plot.pdf", plot.Obs.ASVs)
+ggsave("./obs_ASV_plot.pdf", plot.Obs.ASVs)
 ```
 
 ## Ordination 
@@ -154,7 +152,7 @@ unconstrained_ordination_jsd <- plot_ordination(physeq_mse1.filtered3, pcoa_ord_
         "Antibiotic_Drought_Herbicide_MP" = "#000000"
     )) # the clustering is not as clear compared to bray-curtis 
 
-ggsave("~/pcoa_jsd_ordination.pdf", unconstrained_ordination_jsd, width = 10, height = 8)
+ggsave("./pcoa_jsd_ordination.pdf", unconstrained_ordination_jsd, width = 10, height = 8)
 ```
 
 # Variance partitioning 
@@ -187,7 +185,7 @@ rank_env #R2 = % variation each variable explains
 rank_env <- rank_env %>% 
   arrange(desc(R2)) %>% 
   mutate(Variable = factor(Variable, levels = Variable), 
-         R2_pct = R2 * 100) # convert to percentage for plotting 
+         R2_pct = R2 * 100) # convert to percentage for plotting later
 ```
 
 
@@ -294,7 +292,7 @@ jsd_mean_distances_se <- ggplot(res_jsd, aes(x = Treatment, y = Distance_to_Cont
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ## Add metabolomics data 
-metabolomic_jsd_data <- readRDS("~/metabolomic_jsd_data.rds")
+metabolomic_jsd_data <- readRDS("./metabolomic_jsd_data.rds")
 # combine with microbiome 
 control_jsd_combined <- bind_rows(list(microbiome = res_jsd, metabolites = metabolomic_jsd_data), 
                                   .id = "data_type")
@@ -312,7 +310,7 @@ combined_control_jsd <- ggplot(control_jsd_combined, aes(x = Treatment, y = Dist
   scale_color_manual(values = c("microbiome" = "#4363d8", "metabolites" = "#e6194B")) + 
   coord_flip()
 
-ggsave("~/combined_control_jsd.pdf", combined_control_jsd, width = 10, height = 14)
+ggsave("./combined_control_jsd.pdf", combined_control_jsd, width = 10, height = 14)
 ```
 
 
@@ -362,7 +360,7 @@ DRMP_jsd_distance <- ggplot(drought_mp_distances, aes(x = treatment, y = mean_di
   theme(plot.title = element_text(hjust = 0.5))
 
 ## Add metabolomics data 
-drought_mp_metabolomics_d <- readRDS("~/drought_mp_metabolomics_d.rds")
+drought_mp_metabolomics_d <- readRDS("./drought_mp_metabolomics_d.rds")
 # combine with microbiome 
 DRMP_jsd_combined <- bind_rows(list(microbiome = drought_mp_distances, metabolites = drought_mp_metabolomics_d), 
                                   .id = "data_type")
@@ -413,7 +411,7 @@ ABMP_jsd_distance <- ggplot(antibiotic_mp_distances, aes(x = treatment, y = mean
   theme(plot.title = element_text(hjust = 0.5))
 
 ## Add metabolomics data 
-antibiotic_mp_metabolomics_d <- readRDS("~/antibiotic_mp_metabolomics_d.rds")
+antibiotic_mp_metabolomics_d <- readRDS("./antibiotic_mp_metabolomics_d.rds")
 # combine with microbiome 
 ABMP_jsd_combined <- bind_rows(list(microbiome = antibiotic_mp_distances, metabolites = antibiotic_mp_metabolomics_d), 
                                   .id = "data_type")
@@ -463,7 +461,7 @@ HBMP_jsd_distance <- ggplot(herbicide_mp_distances, aes(x = treatment, y = mean_
   theme(plot.title = element_text(hjust = 0.5))
 
 ## Add metabolomics data 
-herbicide_mp_metabolomics_d <- readRDS("~/herbicide_mp_metabolomics_d.rds")
+herbicide_mp_metabolomics_d <- readRDS("./herbicide_mp_metabolomics_d.rds")
 # combine with microbiome 
 HBMP_jsd_combined <- bind_rows(list(microbiome = herbicide_mp_distances, metabolites = herbicide_mp_metabolomics_d), 
                                   .id = "data_type")
@@ -513,7 +511,7 @@ ABHB_jsd_distance <- ggplot(antibiotic_herbicide_distances, aes(x = treatment, y
   theme(plot.title = element_text(hjust = 0.5))
 
 ## Add metabolomics data 
-antibiotic_herbicide_metabolomics_d <- readRDS("~/antibiotic_herbicide_metabolomics_d.rds")
+antibiotic_herbicide_metabolomics_d <- readRDS("./antibiotic_herbicide_metabolomics_d.rds")
 # combine with microbiome 
 ABHB_jsd_combined <- bind_rows(list(microbiome = antibiotic_herbicide_distances, metabolites = antibiotic_herbicide_metabolomics_d), 
                                   .id = "data_type")
@@ -563,7 +561,7 @@ DRHB_jsd_distance <- ggplot(drought_herbicide_distances, aes(x = treatment, y = 
   theme(plot.title = element_text(hjust = 0.5))
 
 ## Add metabolomics data 
-drought_herbicide_metabolomics_d <- readRDS("~/drought_herbicide_metabolomics_d.rds")
+drought_herbicide_metabolomics_d <- readRDS("./drought_herbicide_metabolomics_d.rds")
 # combine with microbiome 
 DRHB_jsd_combined <- bind_rows(list(microbiome = drought_herbicide_distances, metabolites = drought_herbicide_metabolomics_d), 
                                   .id = "data_type")
@@ -612,7 +610,7 @@ ABDR_jsd_distance <- ggplot(antibiotic_drought_distances, aes(x = treatment, y =
   theme(plot.title = element_text(hjust = 0.5))
 
 ## Add metabolomics data 
-antibiotic_drought_metabolomics_d <- readRDS("~/antibiotic_drought_metabolomics_d.rds")
+antibiotic_drought_metabolomics_d <- readRDS("./antibiotic_drought_metabolomics_d.rds")
 # combine with microbiome 
 ABDR_jsd_combined <- bind_rows(list(microbiome = antibiotic_drought_distances, metabolites = antibiotic_drought_metabolomics_d), 
                                   .id = "data_type")
@@ -639,7 +637,7 @@ two_stress_combined_jsd <- ggarrange(combined_DRMP_jsd, combined_ABMP_jsd, combi
                                      combined_ABHB_jsd, combined_DRHB_jsd, combined_ABDR_jsd,
                                      ncol = 3, nrow = 2, common.legend = TRUE)
 
-ggsave("~/two_stress_combined_jsd.pdf", two_stress_combined_jsd, width = 12)
+ggsave("./two_stress_combined_jsd.pdf", two_stress_combined_jsd, width = 12)
 
 ### 3-way stresses ### 
 ## DR + AB + MP ## 
@@ -673,7 +671,7 @@ ABDRMP_jsd_distance <- ggplot(antibiotic_drought_mp_distances, aes(x = treatment
   theme(plot.title = element_text(hjust = 0.5))
   
 ## Add metabolomics data 
-antibiotic_drought_mp_metabolomics_d <- readRDS("~/antibiotic_drought_mp_metabolomics_d.rds")
+antibiotic_drought_mp_metabolomics_d <- readRDS("./antibiotic_drought_mp_metabolomics_d.rds")
 # combine with microbiome 
 ABDRMP_jsd_combined <- bind_rows(list(microbiome = antibiotic_drought_mp_distances, metabolites = antibiotic_drought_mp_metabolomics_d), 
                                  .id = "data_type")
@@ -723,7 +721,7 @@ DRHBMP_jsd_distance <- ggplot(drought_herbicide_mp_distances, aes(x = treatment,
   theme(plot.title = element_text(hjust = 0.5))
 
 ## Add metabolomics data 
-drought_herbicide_mp_metabolomics_d <- readRDS("~/drought_herbicide_mp_metabolomics_d.rds")
+drought_herbicide_mp_metabolomics_d <- readRDS("./drought_herbicide_mp_metabolomics_d.rds")
 # combine with microbiome 
 DRHBMP_jsd_combined <- bind_rows(list(microbiome = drought_herbicide_mp_distances, metabolites = drought_herbicide_mp_metabolomics_d), 
                                  .id = "data_type")
@@ -773,7 +771,7 @@ ABHBMP_jsd_distance <- ggplot(antibiotic_herbicide_mp_distances, aes(x = treatme
   theme(plot.title = element_text(hjust = 0.5))
 
 ## Add metabolomics data 
-antibiotic_herbicide_mp_metabolomics_d <- readRDS("~/antibiotic_herbicide_mp_metabolomics_d.rds")
+antibiotic_herbicide_mp_metabolomics_d <- readRDS("./antibiotic_herbicide_mp_metabolomics_d.rds")
 # combine with microbiome 
 ABHBMP_jsd_combined <- bind_rows(list(microbiome = antibiotic_herbicide_mp_distances, metabolites = antibiotic_herbicide_mp_metabolomics_d), 
                                  .id = "data_type")
@@ -823,7 +821,7 @@ ABDRHB_jsd_distance <- ggplot(antibiotic_drought_herbicide_distances, aes(x = tr
   theme(plot.title = element_text(hjust = 0.5))
 
 ## Add metabolomics data 
-antibiotic_drought_herbicide_metabolomics_d <- readRDS("~/antibiotic_drought_herbicide_metabolomics_d.rds")
+antibiotic_drought_herbicide_metabolomics_d <- readRDS("./antibiotic_drought_herbicide_metabolomics_d.rds")
 # combine with microbiome 
 ABDRHB_jsd_combined <- bind_rows(list(microbiome = antibiotic_drought_herbicide_distances, metabolites = antibiotic_drought_herbicide_metabolomics_d), 
                                  .id = "data_type")
@@ -849,7 +847,7 @@ three_stress_jsd_plots <- ggarrange(ABDRMP_jsd_distance, DRHBMP_jsd_distance, AB
 three_stress_combined_jsd <- ggarrange(combined_ABDRMP_jsd, combined_DRHBMP_jsd, combined_ABHBMP_jsd, combined_ABDRHB_jsd, 
                                        ncol = 2, nrow = 2, common.legend = TRUE)
 
-ggsave("~/three_stress_combined_jsd.pdf", three_stress_combined_jsd, width = 10)
+ggsave("./three_stress_combined_jsd.pdf", three_stress_combined_jsd, width = 10)
 
 #### 4 stress #### 
 ## AB + DR + HB + MP ## 
@@ -886,7 +884,7 @@ all_four_jsd_distance <- ggplot(antibiotic_drought_herbicide_mp_distances, aes(x
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ## Add metabolomics data 
-allfour_metabolomics_d <- readRDS("~/allfour_metabolomics_d.rds")
+allfour_metabolomics_d <- readRDS("./allfour_metabolomics_d.rds")
 # combine with microbiome 
 allfour_jsd_combined <- bind_rows(list(microbiome = antibiotic_drought_herbicide_mp_distances, metabolites = allfour_metabolomics_d), 
                                  .id = "data_type")
@@ -907,7 +905,7 @@ combined_allfour_jsd <- ggplot(allfour_jsd_combined, aes(x = treatment, y = mean
   coord_flip() + 
   theme(legend.position = "none")
 
-ggsave("~/combined_allfour_jsd.pdf", combined_allfour_jsd, width = 6, height = 4)
+ggsave("./combined_allfour_jsd.pdf", combined_allfour_jsd, width = 6, height = 4)
 ```
 
 # variance partitioning together 
@@ -958,7 +956,7 @@ variance_part_combined <- ggplot(combined_var_part, aes(x = R2_pct, y = Variable
   labs(x = "Variance Explained (%)") + 
   scale_fill_manual(values = c("Microbiome" = "#4363d8", "Exudates" = "#e6194B"))
 
-ggsave("~/exudates_variance_part_combined.pdf", variance_part_combined, height = 5)
+ggsave("./exudates_variance_part_combined.pdf", variance_part_combined, height = 5)
 ```
 
 # bipartite networks - microbiome & exudate integration 
