@@ -910,6 +910,10 @@ ggsave("./combined_allfour_jsd.pdf", combined_allfour_jsd, width = 6, height = 4
 
 # variance partitioning together 
 ```{r}
+#load metabolomics phyloseq objects 
+load("./exudates_phyloseq_annotated.Rdata") # only annotated metabolomics data 
+load("./exudates_phyloseq_full.Rdata") # full (annotated and not) metabolomics data 
+
 dist_full_exud <- phyloseq::distance(physeq_full, method = "jsd") 
 dist_full_exud_mat <- as.matrix(dist_full_exud)
 
@@ -1169,8 +1173,8 @@ names(network_results_045) <- names(network_samples)
 all_edges_045 <- bind_rows(lapply(network_results_045, function(x) if(!is.null(x)) x$edges else NULL))
 all_nodes_045 <- bind_rows(lapply(network_results_045, function(x) if(!is.null(x)) x$nodes else NULL))
 
-write.csv(all_edges_045, "~/network_edges_rho045.csv", row.names = FALSE)
-write.csv(all_nodes_045, "~/network_nodes_rho045.csv", row.names = FALSE)
+write.csv(all_edges_045, "./network_edges_rho045.csv", row.names = FALSE)
+write.csv(all_nodes_045, "./network_nodes_rho045.csv", row.names = FALSE)
 
 ### 6. Threshold sensitivity analysis (0.35, 0.40, 0.45, 0.50) ####
 
@@ -1212,7 +1216,7 @@ sensitivity_summary <- map_dfr(names(sensitivity_results), function(thresh_name)
   })
 })
 
-write.csv(sensitivity_summary, "~/network_threshold_sensitivity.csv", row.names = FALSE)
+write.csv(sensitivity_summary, "./network_threshold_sensitivity.csv", row.names = FALSE)
 
 ### 7. Global network with bootstrap (for stable edges) ####
 
@@ -1285,8 +1289,8 @@ global_boot <- bootstrap_global_network(
   rho_cutoff = 0.35, q_cutoff = 0.05, n_boot = 100, boot_cutoff = 0.75
 )
 
-write.csv(global_boot$stable_edges, "~/global_stable_edges.csv", row.names = FALSE)
-write.csv(global_boot$all_edges, "~/global_all_edges.csv", row.names = FALSE)
+write.csv(global_boot$stable_edges, "./global_stable_edges.csv", row.names = FALSE)
+write.csv(global_boot$all_edges, "./global_all_edges.csv", row.names = FALSE)
 
 ### 8. Edge preservation analysis ####
 
@@ -1313,7 +1317,7 @@ if (!is.null(global_boot) && nrow(global_boot$stable_edges) > 0) {
     rownames_to_column("edge") %>%
     separate(edge, into = c("ASV", "metabolite"), sep = "~~~")
   
-  write.csv(preservation_df, "~/edge_preservation_across_networks.csv", row.names = FALSE)
+  write.csv(preservation_df, "./edge_preservation_across_networks.csv", row.names = FALSE)
 }
 
 ### 9. Plot one network example ####
@@ -1353,7 +1357,7 @@ if (!is.null(global_boot) && nrow(global_boot$stable_edges) > 0) {
     "Global Stable Network (bootstrap ≥ 0.75)"
   )
   
-  ggsave("~/network_global_stable.pdf",
+  ggsave("./network_global_stable.pdf",
          p_global, width = 12, height = 10)
 }
 
@@ -1362,7 +1366,7 @@ for (net_name in names(network_results_045)) {
   net <- network_results_045[[net_name]]
   if (!is.null(net) && nrow(net$edges) > 0) {
     p <- plot_bipartite_network(net$edges, net$nodes, net_name)
-    ggsave(paste0("~/network_", net_name, ".pdf"),
+    ggsave(paste0("./network_", net_name, ".pdf"),
            p, width = 10, height = 8)
   }
 }
@@ -1485,7 +1489,7 @@ if (!is.null(global_boot) && nrow(global_boot$stable_edges) > 0) {
     label_top_n = 30
   )
   
-  ggsave("~/network_global_stable.pdf",
+  ggsave("./network_global_stable.pdf",
          p_global, width = 12, height = 10)
 }
 
@@ -1502,7 +1506,7 @@ for (net_name in names(network_results_045)) {
       title_text = net_name, 
       label_top_n = 20
     )
-    ggsave(paste0("~/network_", net_name, ".pdf"),
+    ggsave(paste0("./network_", net_name, ".pdf"),
            p, width = 10, height = 8)
   }
 }
@@ -1553,7 +1557,7 @@ network_stats <- map_dfr(names(network_results_045), function(nm) {
   )
 })
 
-write.csv(network_stats, "~/network_summary_stats.csv", row.names = FALSE)
+write.csv(network_stats, "./network_summary_stats.csv", row.names = FALSE)
 
 
 # Separate global from stress-specific
@@ -1584,7 +1588,7 @@ p_edge_count <- network_stats %>%
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-ggsave("~/network_edge_count_comparison.pdf",
+ggsave("./network_edge_count_comparison.pdf",
        p_edge_count, width = 8, height = 5)
 # note that these edges are only between ASVs and metabolites
 
@@ -1653,6 +1657,6 @@ p_jaccard <- ggplot(presence_absence_overlap, aes(x = stressor, y = jaccard)) +
        title = "Edge overlap: present vs. absent networks") +
   theme_bw()
 
-ggsave("~/network_jaccard_overlap.pdf",
+ggsave("./network_jaccard_overlap.pdf",
        p_jaccard, width = 6, height = 4)
 ```
