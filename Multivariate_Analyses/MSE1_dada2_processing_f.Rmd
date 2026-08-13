@@ -424,8 +424,7 @@ errR_4 <- learnErrors(
 
 Compare error rates 
 ```{r}
-#save.image("./dada2_env_errors.RData")
-# Dots in 0 y-axis is an expected behavior, especially with high-quality reads (Q ≥ 30)
+save.image("./dada2_env_errors.RData")
 plotErrors(errF, nominalQ = TRUE)
 plotErrors(errF_1, nominalQ=TRUE)
 plotErrors(errF_2, nominalQ=TRUE)
@@ -502,13 +501,13 @@ rownames(track) <- sample.names
 head(track)
 
 # sum all input reads across samples: 
-sum(track[, "input"]) # 33,975,459
+sum(track[, "input"]) 
 # sum all filtered: 
-sum(track[, "filtered"]) # 31,110,900
-sum(track[, "denoisedF"]) # 27,631,216
-sum(track[, "denoisedR"]) # 27,631,128
-sum(track[, "merged"]) # 23,988,478
-sum(track[, "nonchim"]) # 23,229,069
+sum(track[, "filtered"]) 
+sum(track[, "denoisedF"]) 
+sum(track[, "denoisedR"]) 
+sum(track[, "merged"]) 
+sum(track[, "nonchim"]) 
 ```
 
 Step 13: Assign taxonomy
