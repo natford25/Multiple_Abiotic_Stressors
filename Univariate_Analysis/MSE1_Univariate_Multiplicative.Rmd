@@ -1,15 +1,9 @@
 ---
-title: "MSE1_Univariate_Multiplicative_v2"
-output: html_document
-date: "2026-05-15"
----
----
 title: "MSE1_Univariate_Multiplicative"
 author: "Natalie Ford"
 date: "`r Sys.Date()`"
 output: html_document
 ---
-Final R Markdown file for the biomass and root architecture multivariate analysis for MSE1 publication
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
