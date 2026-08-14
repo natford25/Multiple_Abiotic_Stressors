@@ -11,15 +11,15 @@ Concurrent environmental stressors are increasingly common and interact in non-a
 * Main analysis conducted in [MSE1_Univariate_Multiplicative](Univariate_Analysis/MSE1_Univariate_Multiplicative.Rmd)
 
 ## Bacterial processing and analysis 
-* Bacterial sequences were trimmed in [MSE1_dada2_cutadapt](MSE1_dada2_cutadapt.Rmd)
-* Bacterial sequences were processed and filtered in [MSE1_dada2_processing](MSE1_dada2_processing)
-* Taxonomy was assigned to bacterial sequences and rarefaction was performed in [MSE1_16S_Processing](MSE1_16S_Processing)
-* Main analysis conducted in [MSE1_16S_Multiplicative](MSE1_16S_Multiplicative)
+* Bacterial sequences were trimmed in [MSE1_dada2_cutadapt](Multivariate_Analsyses/MSE1_dada2_cutadapt.Rmd)
+* Bacterial sequences were processed and filtered in [MSE1_dada2_processing](Multivariate_Analyses/MSE1_dada2_processing.Rmd)
+* Taxonomy was assigned to bacterial sequences and rarefaction was performed in [MSE1_16S_Processing](Multivariate_Analyses/MSE1_16S_Processing.Rmd)
+* Main analysis conducted in [MSE1_16S_Multiplicative](Multivariate_Analyses/MSE1_16S_Multiplicative.Rmd)
 
 ## Metabolomics processing and analysis 
-* Data wrangling was conducted in [MSE1_Exudates](MSE1_Exudates)
-* Quantification of total organic carbon in exudates performed in [MSE1_TOC](MSE1_TOC)
+* Data wrangling was conducted in [MSE1_Exudates](Multivariate_Analyses/MSE1_Exudates.Rmd)
+* Quantification of total organic carbon in exudates performed in [MSE1_TOC](Univariate_Analysis/MSE1_TOC.Rmd)
 
 ## Supplementary/Other information 
-* Confirmation of drought effects conducted in [MSE1_Drought](MSE1_Drought)
+* Confirmation of drought effects conducted in [MSE1_Drought](Univariate_Analysis/MSE1_Drought.Rmd)
   
