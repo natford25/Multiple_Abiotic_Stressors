@@ -11,7 +11,7 @@ Concurrent environmental stressors are increasingly common and interact in non-a
 * Main analysis conducted in [MSE1_Univariate_Multiplicative](Univariate_Analysis/MSE1_Univariate_Multiplicative.Rmd)
 
 ## Bacterial processing and analysis 
-* Bacterial sequences were trimmed in [MSE1_dada2_cutadapt](Multivariate_Analsyses/MSE1_dada2_cutadapt.Rmd)
+* Bacterial sequences were trimmed in [MSE1_dada2_cutadapt](Multivariate_Analyses/MSE1_dada2_cutadapt.Rmd)
 * Bacterial sequences were processed and filtered in [MSE1_dada2_processing](Multivariate_Analyses/MSE1_dada2_processing.Rmd)
 * Taxonomy was assigned to bacterial sequences and rarefaction was performed in [MSE1_16S_Processing](Multivariate_Analyses/MSE1_16S_Processing.Rmd)
 * Main analysis conducted in [MSE1_16S_Multiplicative](Multivariate_Analyses/MSE1_16S_Multiplicative.Rmd)
