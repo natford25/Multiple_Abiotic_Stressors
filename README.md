@@ -11,16 +11,16 @@ Concurrent environmental stressors can generate biological responses that are di
 Raw sequencing data is available on NCBI SRA under BioProject ID PRJNA1509610. 
 
 ## Phenotypic processing and analysis 
-* Main analysis conducted in [MSE1_Univariate_Multiplicative](Univariate_Analysis/MSE1_Univariate_Multiplicative.Rmd)
+* Main analysis of biomass and root architectural traits conducted in [MSE1_Univariate_Multiplicative](Univariate_Analysis/MSE1_Univariate_Multiplicative.Rmd)
 
 ## Bacterial processing and analysis 
 * Bacterial sequences were trimmed in [MSE1_dada2_cutadapt](Multivariate_Analyses/MSE1_dada2_cutadapt.Rmd)
 * Bacterial sequences were processed and filtered in [MSE1_dada2_processing](Multivariate_Analyses/MSE1_dada2_processing.Rmd)
 * Taxonomy was assigned to bacterial sequences and rarefaction was performed in [MSE1_16SProcessing](Multivariate_Analyses/MSE1_16SProcessing.Rmd)
-* Main analysis conducted in [MSE1_16S_multiplicative](Multivariate_Analyses/MSE1_16S_multiplicative.Rmd)
+* Main rhizosphere bacterial community analysis conducted in [MSE1_16S_multiplicative](Multivariate_Analyses/MSE1_16S_multiplicative.Rmd)
 
 ## Metabolomics processing and analysis 
-* Data wrangling was conducted in [MSE1_Exudates](Multivariate_Analyses/MSE1_Exudates.Rmd)
+* Data wrangling and initial analysis of metabolomics data was conducted in [MSE1_Exudates](Multivariate_Analyses/MSE1_Exudates.Rmd). Main analysis performed in conjunction with main analysis of bacterial community ([MSE1_16S_multiplicative](Multivariate_Analyses/MSE1_16S_multiplicative.Rmd))
 * Quantification of total organic carbon in exudates performed in [MSE1_TOC](Univariate_Analysis/MSE1_TOC.Rmd)
 
 ## Supplementary/Other information 
