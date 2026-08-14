@@ -3,7 +3,6 @@ title: "MSE1_Drought"
 output: html_document
 date: "2026-05-26"
 ---
-Drought treatment in MSE1 
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
