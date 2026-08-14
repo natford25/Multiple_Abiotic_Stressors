@@ -3,7 +3,6 @@ title: "MSE1_Exudates_v3"
 output: html_document
 date: "2026-05-15"
 ---
-Final R Markdown file for exudate analysis for MSE1 publication
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
