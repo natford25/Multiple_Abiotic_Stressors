@@ -23,6 +23,6 @@ Raw sequencing data is available on NCBI SRA under BioProject ID PRJNA1509610.
 * Data wrangling and initial analysis of metabolomics data was conducted in [MSE1_Exudates](Multivariate_Analyses/MSE1_Exudates.Rmd). Main analysis performed in conjunction with main analysis of bacterial community ([MSE1_16S_multiplicative](Multivariate_Analyses/MSE1_16S_multiplicative.Rmd))
 * Quantification of total organic carbon in exudates performed in [MSE1_TOC](Univariate_Analysis/MSE1_TOC.Rmd)
 
-## Supplementary/Other information 
+## Supplementary information 
 * Confirmation of drought effects conducted in [MSE1_Drought](Univariate_Analysis/MSE1_Drought.Rmd)
   
