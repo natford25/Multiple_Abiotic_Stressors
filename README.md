@@ -8,8 +8,8 @@ Repository of code for "Concurrent abiotic stressors reorganize plant-microbiome
 Concurrent environmental stressors can generate biological responses that are difficult to predict from individual stressors alone. We used a full-factorial wheat experiment combining drought, microplastic, antibiotic, and herbicide exposure to determine how multiple stressors reorganize plant-soil microbial systems. A multiplicative null model revealed predominantly antagonistic interactions for biomass, whereas root architectural traits exhibited both synergistic and antagonistic responses. A complementary distance-based approach showed that rhizosphere microbiota and root exudate profiles generally diverged further from control conditions as stressor number increased, although responses depended strongly on stressor identity. Microplastic and antibiotic exposure disproportionately shaped microbiota composition and higher-order treatment outcomes. Stressors also extensively reorganized microbe-metabolite association networks, despite no detectable changes in bacterial alpha diversity. Together, these results show that multi-stressor effects are response-dependent and multidimensional, with plant traits, microbial communities, root chemistry, and their associations capturing distinct components of plant-microbe responses under concurrent environmental stress. 
 
 ## Raw data 
-Raw 16S rRNA amplicon sequencing data is available on NCBI SRA under BioProject ID PRJNA1509610. 
-Raw metabolomics data is available on XXXXx
+Raw 16S rRNA amplicon sequencing data are available on NCBI SRA under BioProject ID PRJNA1509610. 
+Raw metabolomics data are available as a MassIVE dataset under accession number MSV000102871. 
 
 ## Phenotypic processing and analysis 
 * Main analysis of biomass and root architectural traits conducted in [MSE1_Univariate_Multiplicative](Univariate_Analysis/MSE1_Univariate_Multiplicative.Rmd)
